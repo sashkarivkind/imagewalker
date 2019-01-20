@@ -67,7 +67,7 @@ class DeepQNetwork:
             self.q_eval = np.zeros((np.shape(state_table)[0],n_actions))
         else:
             self.cost_his = []
-            self.dqn = rlnet.DQN_net()
+            self.dqn = rlnet.DQN_net(n_features, n_actions)
             self.dqn.sess = tf.Session()
             self.dqn.sess.run(tf.global_variables_initializer())
             self.dqn.reset()

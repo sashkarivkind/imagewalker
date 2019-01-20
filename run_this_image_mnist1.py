@@ -2,7 +2,7 @@ from image_env_mnist1 import Image_env1
 from RL_brain_b import DeepQNetwork
 import numpy as np
 import time
-
+BMP_MODE = True
 def my_print_array(a):
     uu=''
     for ii in range(a.shape[0]):
@@ -28,11 +28,14 @@ def run_img():
             #print('sample q entry',observation, action, reward, observation_)
             if (step > 100) and (step % 10000 == 0):
                 RL.learn()
-                act_map=RL.map_actions(all_observations_for_mapping) if RL.dqn_mode else RL.q_eval
-                #print(np.argmax(act_map,axis=1).reshape((env.image_x,env.image_y)))
-                my_print_array(np.flip(np.array(env.num2srt_actions(np.argmax(act_map, axis=1))).reshape((env.image_x,env.image_y)).transpose(), axis=0))
+                if not BMP_MODE:
+                    act_map=RL.map_actions(all_observations_for_mapping) if RL.dqn_mode else RL.q_eval
+                    #print(np.argmax(act_map,axis=1).reshape((env.image_x,env.image_y)))
+                    my_print_array(np.flip(np.array(env.num2srt_actions(np.argmax(act_map, axis=1))).reshape((env.image_x,env.image_y)).transpose(), axis=0))
                 print('epsilon', RL.epsilon)
-                env.q_snapshots.append([step,all_observations_for_mapping,act_map])
+                if not BMP_MODE:
+                    env.q_snapshots.append([step,all_observations_for_mapping,act_map])
+
                 env.plot_reward()
             # swap observation
             observation = observation_
@@ -54,8 +57,8 @@ def run_img():
 
 if __name__ == "__main__":
     # maze game
-    env = Image_env1()
-    all_observations_for_mapping = env.observation_space()
+    env = Image_env1(bmp_features=BMP_MODE)
+    all_observations_for_mapping = env.observation_space() if not BMP_MODE else None
     RL = DeepQNetwork(env.n_actions, env.n_features,
                       #learning_rate=0.00005,
                       reward_decay=0.5,

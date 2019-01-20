@@ -2,9 +2,9 @@ import numpy as np
 import tensorflow as tf
 
 class DQN_net():
-    def __init__(self):
-        self.q_eval = Network(trainable=True)
-        self.q_next = Network()
+    def __init__(self,n_features, n_actions,):
+        self.q_eval = Network(n_features, n_actions, trainable=True)
+        self.q_next = Network(n_features, n_actions)
         self.sess = None
 
     def reset(self):
@@ -33,7 +33,7 @@ class DQN_net():
                   feed_dict={self.q_next.observations: observations})
 
 class Network():
-    def __init__(self, n_features=2, n_actions=4, lr=0.0005, trainable = False):
+    def __init__(self, n_features, n_actions, lr=0.0005, trainable = False):
         #self.default_nl=tf.nn.relu
         self.lr = lr
         self.next_layer_id = 0
@@ -53,7 +53,9 @@ class Network():
         self.next_layer_id +=1
         return this_layer_id
 
-    def vanilla_network(self, layer_size = [2, 20,20,20, 20,20,20, 4]):
+    def vanilla_network(self, layer_size = [None, 20,20,20, 20,20,20, None]):
+        layer_size[0] = self.n_features
+        layer_size[-1] = self.n_actions
         next_l = self.input_layer() #todo currently the  number of features in the input layer is defined elsewhere
         self.observations = next_l
         for ll, ll_size  in enumerate(layer_size[1:-1]):

@@ -1,11 +1,4 @@
-"""
-Reinforcement learning maze example.
-This script is the environment part of this example.
-The RL is in RL_brain.py.
 
-View more on my tutorial page: https://morvanzhou.github.io/tutorials/
-
-"""
 import numpy as np
 import time
 import sys
@@ -37,10 +30,10 @@ DISP_SCALE = 50
 REFLECT_EN = 0
 RECONSTRUCT_DECAY=0.9
 
-MAX_STEPS=300
+MAX_STEPS=3000
 
-WIN_X_HLF = (WIN_X-1) // 2
-WIN_Y_HLF = (WIN_Y-1) // 2
+WIN_X_HLF = (WIN_X) // 2
+WIN_Y_HLF = (WIN_Y) // 2
 
 def magnify_image(img,factor):
     return np.kron(img,np.ones([factor,factor]))
@@ -49,14 +42,14 @@ def image_from_np(img, scale=256,size_fac=1):
     return ImageTk.PhotoImage(image=Image.fromarray(scale*magnify_image(img,size_fac)))
 
 class Image_env1( object):
-    def __init__(self):
+    def __init__(self,bmp_features = False):
         self.action_space = ['u', 'd', 'l', 'r']
         self.n_actions = len(self.action_space)
-        self.n_features = 2
         self.graphics_on=False
         # self.title('image reconstructor')
         # self.geometry('{0}x{1}'.format(IMAGE_X * DISP_SCALE, IMAGE_Y * DISP_SCALE))
-        self.reconstruction = np.zeros([IMAGE_X, IMAGE_Y])
+        self.reconstruction = np.zeros([IMAGE_Y, IMAGE_X])
+        #self.padded_win = np.zeros(WIN_Y, WIN_X)
         self.pos = {'x':np.random.randint(IMAGE_X) ,'y': np.random.randint(IMAGE_Y)}
         #self.pos = {'x':IMAGE_X // 2,'y':IMAGE_Y // 2}
 
@@ -69,6 +62,11 @@ class Image_env1( object):
         self.q_snapshots = []
         self.reward_plot_handler = None
         self.history_file = 'history/rl_history' + str(time.time())+'.pkl'
+        self.bmp_features = bmp_features
+        if bmp_features:
+            self.n_features = WIN_X*WIN_Y
+        else:
+            self.n_features = 2
         self.init_scenario()
 
         #initialize graphics if relevant
@@ -82,6 +80,8 @@ class Image_env1( object):
     def init_scenario(self):
         self.orig=1.0*np.array(images[IMAGE_NUM]).reshape([IMAGE_X,IMAGE_Y])
         self.orig= self.orig/np.max(self.orig)
+        self.padded_orig = np.zeros([IMAGE_Y+WIN_Y, IMAGE_X+WIN_X])
+        self.padded_orig[WIN_Y_HLF:IMAGE_Y+WIN_Y_HLF, WIN_X_HLF:IMAGE_X+WIN_X_HLF] = self.orig
         self.step_cnt = 0
         self.pos = {'x': np.random.randint(IMAGE_X), 'y': np.random.randint(IMAGE_Y)}
 
@@ -90,13 +90,11 @@ class Image_env1( object):
         time.sleep(0.1)
         #self.canvas.delete(self.agentwin)
         self.init_scenario()
-        s_ = np.array([1.0 * self.pos['x'] / IMAGE_X, 1.0 * self.pos['y'] / IMAGE_Y])
+        s_ = self.current_features()
         return s_
 
     def step(self, action):
         self.copy_current_region()
-        # self.reconstruction[self.pos['x'],self.pos['y']] = self.orig[self.pos['x'],self.pos['y']]
-        # reward = self.orig[self.pos['x'],self.pos['y']]#todo -
         reward = -np.sqrt(np.mean((self.reconstruction - self.orig)**2))
         self.reward_list.append(reward)
         self.value = self.value_alpha*reward + (1-self.value_alpha)*self.value
@@ -120,10 +118,9 @@ class Image_env1( object):
         #     self.plot_reward()
 
         done = self.step_cnt > MAX_STEPS
-        s_ = np.array([1.0*self.pos['x']/IMAGE_X, 1.0*self.pos['y']/IMAGE_Y])
+        s_ = self.current_features()
         if self.step_cnt % 1 == 0 and self.graphics_on:
             self.ax.imshow(self.reconstruction, interpolation='none', cmap='gray', vmin=0, vmax=1)
-            # self.ax.imshow(self.orig, interpolation='none', cmap='gray', vmin=0, vmax=1)
             self.rect.set_x(self.pos['x'])
             self.rect.set_y(IMAGE_Y-self.pos['y'])
             plt.draw()
@@ -132,11 +129,14 @@ class Image_env1( object):
         #plt.show()
         return s_, reward, done
     def observation_space(self): #todo define more generally
-        ob = np.zeros([IMAGE_X*IMAGE_Y,2])
-        for x in range(IMAGE_X):
-            for y in range(IMAGE_Y):
-                ob[x*IMAGE_Y+y,:]=[np.double(x)/IMAGE_X,np.double(y)/IMAGE_Y]
-        return ob
+        if not self.bmp_features:
+            ob = np.zeros([IMAGE_X*IMAGE_Y,2])
+            for x in range(IMAGE_X):
+                for y in range(IMAGE_Y):
+                    ob[x*IMAGE_Y+y,:]=[np.double(x)/IMAGE_X,np.double(y)/IMAGE_Y]
+            return ob
+        else:
+            error('not supported yet')
     
     def num2srt_actions(self,actions_by_num):
         return [self.action_space[a] for a in actions_by_num]
@@ -163,5 +163,20 @@ class Image_env1( object):
         #approaching matrix coordinates with y first and y counted from above requires some care
         self.reconstruction[IMAGE_Y-max_y:IMAGE_Y-min_y,min_x:max_x] = self.orig[IMAGE_Y-max_y:IMAGE_Y-min_y,min_x:max_x]
 
+    def current_region_flatten(self):
+        max_x = self.pos['x']+WIN_X_HLF
+        max_y = self.pos['y']+WIN_Y_HLF
+        min_x = self.pos['x']-WIN_X_HLF
+        min_y = self.pos['y']-WIN_Y_HLF
+        #approaching matrix coordinates with y first and y counted from above requires some care
+        return np.reshape(self.padded_orig[IMAGE_Y+WIN_Y_HLF-max_y:IMAGE_Y+WIN_Y_HLF-min_y
+                          ,WIN_X_HLF+min_x:WIN_X_HLF+max_x], [-1])
+
+    def current_features(self):
+        if self.bmp_features:
+            s_ = self.current_region_flatten()
+        else:
+            s_ = np.array([1.0*self.pos['x']/IMAGE_X, 1.0*self.pos['y']/IMAGE_Y])
+        return s_
 
 
