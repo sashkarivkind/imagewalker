@@ -1,5 +1,10 @@
 import numpy as np
 import tensorflow as tf
+import pickle
+
+
+class HP():
+    pass
 
 class DQN_net():
     def __init__(self,n_features, n_actions,):
@@ -32,20 +37,32 @@ class DQN_net():
         return  self.sess.run(self.q_next.estimator,
                   feed_dict={self.q_next.observations: observations})
 
+    def save_nwk_param(self, filename):
+        with open(filename, 'wb') as f:
+            pickle.dump([self.q_eval.theta_values(), self.q_next.theta_values()], f)
+
+    def load_nwk_param(self, filename):
+        with open(filename, 'wb') as f:
+            theta_list = pickle.load(f)
+            self.q_eval.theta_update(theta_list[0])
+            self.q_next.theta_update(theta_list[1])
+            #possibly add q_dual for double DQN in future
+
 class Network():
     def __init__(self, n_features, n_actions, lr=0.0005, trainable = False):
+        self.hp = HP()
         #self.default_nl=tf.nn.relu
-        self.lr = lr
+        self.hp.lr = lr
         self.next_layer_id = 0
-        self.n_features = n_features
-        self.n_actions = n_actions
+        self.hp.n_features = n_features
+        self.hp.n_actions = n_actions
         self.theta = {}
         self.estimator = self.vanilla_network()
         self.q_target = tf.placeholder(tf.float32, [None, n_actions])
         if trainable:
             print(self.q_target,'--------aaaaaaaaaaaa--------', self.estimator)
             self.loss = tf.reduce_mean(tf.squared_difference(self.q_target, self.estimator))
-            self.train_op = tf.train.RMSPropOptimizer(self.lr).minimize(self.loss)
+            self.train_op = tf.train.RMSPropOptimizer(self.hp.lr).minimize(self.loss)
         self.sess = None
 
     def get_layer_id(self):
@@ -54,8 +71,8 @@ class Network():
         return this_layer_id
 
     def vanilla_network(self, layer_size = [None, 20,20,20, 20,20,20, None]):
-        layer_size[0] = self.n_features
-        layer_size[-1] = self.n_actions
+        layer_size[0] = self.hp.n_features
+        layer_size[-1] = self.hp.n_actions
         next_l = self.input_layer() #todo currently the  number of features in the input layer is defined elsewhere
         self.observations = next_l
         for ll, ll_size  in enumerate(layer_size[1:-1]):
@@ -85,10 +102,10 @@ class Network():
         return ff_layer
 
     def input_layer(self):
-        return tf.placeholder(tf.float32, [None, self.n_features])
+        return tf.placeholder(tf.float32, [None, self.hp.n_features])
 
     def train_step_op(self):
-        return tf.train.RMSPropOptimizer(self.lr).minimize(self.loss)
+        return tf.train.RMSPropOptimizer(self.hp.lr).minimize(self.loss)
 
     def assign_param_prep(self,source_nwk): #todo support more elaborated structures than double dictionary
         self.assign_param_op = []
@@ -96,6 +113,19 @@ class Network():
             for this_param in source_nwk.theta[ll]:
                 self.assign_param_op.append(tf.assign(self.theta[ll][this_param],
                                                  source_nwk.theta[ll][this_param]))
+
+    def theta_values(self): #todo support more elaborated structures than double dictionary
+        t = {}
+        for ll in self.theta.keys():
+            t[ll] = {}
+            for this_param in self.theta[ll]:
+                t[ll][this_param] = self.theta[ll][this_param].eval(self.sess)
+        return t
+
+    def theta_update(self,t): #todo support more elaborated structures than double dictionary
+        for ll in t.keys():
+            for this_param in t[ll]:
+                self.theta[ll][this_param].assign(t[ll][this_param]).op.run(session=self.sess)
+
     def update(self, sess):
         sess.run(self.assign_param_op)
-

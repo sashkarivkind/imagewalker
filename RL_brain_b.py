@@ -94,7 +94,6 @@ class DeepQNetwork:
 
         if np.random.uniform() < self.epsilon:
             actions_value = self.compute_q_eval(observation)
-            #print('acacacacacacca',actions_value, 'zzzzzzzzzzzzzzzzzzzzzzzzzzz',np.argmax(actions_value))
             action = np.argmax(actions_value)
         else:
             action = np.random.randint(0, self.n_actions)
