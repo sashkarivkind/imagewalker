@@ -9,51 +9,57 @@ hp.max_episode = 3000
 hp.steps_per_episode = 10000
 hp.steps_between_learnings = 1000
 
+def local_observer(sensor,agent):
+    return np.concatenate([sensor.dvs_view[5,:].reshape([-1]),10*agent.qdot])
 
-def run_img():
+def run_env():
     step = 0
     for episode in range(hp.max_episode):
-        observation = env.reset()
+        observation = local_observer(sensor,agent)
         for step in range(hp.steps_per_episode):
             action = RL.choose_action(observation)
             agent.act(action)
             sensor.update(scene,agent)
-
-            observation_, reward, done = env.step(action)
+            reward.update_rewards(sensor = sensor, agent = agent)
+            observation_  = local_observer(sensor,agent) #todo: generalize
             RL.store_transition(observation, action, reward.reward, observation_)
+            recorder.record([agent.q_ana[0],agent.q[0],agent.qdot[0],reward.rewards[0],reward.rewards[1],reward.reward])
             if (step > 100) and (step % hp.steps_between_learnings == 0):
                 RL.learn()
-            if
-            env.plot_reward()
             observation = observation_
-
             step += 1
-        env.save_train_history()
+            if step%1000 ==0:
+                print(episode,step)
+                recorder.plot()
 
 if __name__ == "__main__":
 
     vertical_edge_mat = np.zeros([28,28])
-    vertical_edge_mat[:,14:] = 1
+    vertical_edge_mat[:,14:] = 1.0
+    recorder = Recorder(n=6)
+
 
     scene = syc.Scene(image_matrix=vertical_edge_mat)
     sensor = syc.Sensor()
     agent = syc.Agent(max_q = [scene.maxx-sensor.hp.winx,scene.maxy-sensor.hp.winy])
     reward = syc.Rewards()
+    RL = DeepQNetwork(len(agent.hp.action_space), sensor.hp.winx+2,#sensor.frame_size+2,
+                      reward_decay=0.9,
+                      e_greedy=0.95,
+                      e_greedy0=0.2,
+                      replace_target_iter=20,
+                      memory_size=3000,
+                      e_greedy_increment=0.001,
+                      state_table=None
+                      )
+
 
     hp.scene = scene.hp
     hp.sensor = sensor.hp
     hp.agent = agent.hp
     hp.reward = reward.hp
+    hp.RL = RL.hp
 
-    RL = DeepQNetwork(len(agent.hp.action_space), sensor.frame_size,
-                      reward_decay=0.5,
-                      e_greedy=0.8,
-                      e_greedy0=0.5,
-                      replace_target_iter=20,
-                      memory_size=300000,
-                      e_greedy_increment=0.001,
-                      state_table=all_observations_for_mapping
-                      )
     run_env()
 
 

@@ -54,8 +54,8 @@ class Network():
         #self.default_nl=tf.nn.relu
         self.hp.lr = lr
         self.next_layer_id = 0
-        self.hp.n_features = n_features
-        self.hp.n_actions = n_actions
+        self.n_features = n_features
+        self.n_actions = n_actions
         self.theta = {}
         self.estimator = self.vanilla_network()
         self.q_target = tf.placeholder(tf.float32, [None, n_actions])
@@ -70,9 +70,9 @@ class Network():
         self.next_layer_id +=1
         return this_layer_id
 
-    def vanilla_network(self, layer_size = [None, 20,20,20, 20,20,20, None]):
-        layer_size[0] = self.hp.n_features
-        layer_size[-1] = self.hp.n_actions
+    def vanilla_network(self, layer_size = [None, 200, 200, None]):
+        layer_size[0] = self.n_features
+        layer_size[-1] = self.n_actions
         next_l = self.input_layer() #todo currently the  number of features in the input layer is defined elsewhere
         self.observations = next_l
         for ll, ll_size  in enumerate(layer_size[1:-1]):
@@ -102,7 +102,7 @@ class Network():
         return ff_layer
 
     def input_layer(self):
-        return tf.placeholder(tf.float32, [None, self.hp.n_features])
+        return tf.placeholder(tf.float32, [None, self.n_features])
 
     def train_step_op(self):
         return tf.train.RMSPropOptimizer(self.hp.lr).minimize(self.loss)

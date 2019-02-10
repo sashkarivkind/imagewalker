@@ -14,7 +14,7 @@ import numpy as np
 import tensorflow as tf
 import scipy.spatial.distance as ssd
 import RL_networks as rlnet
-
+from misc import HP
 np.random.seed(1)
 tf.set_random_seed(1)
 np.set_printoptions(threshold=np.nan)
@@ -40,6 +40,7 @@ class DeepQNetwork:
             state_table=None
     ):
         self.dqn_mode = True
+        self.hp = HP()
         self.table_alpha = 0.1
         self.n_actions = n_actions
         self.n_features = n_features
@@ -94,6 +95,7 @@ class DeepQNetwork:
 
         if np.random.uniform() < self.epsilon:
             actions_value = self.compute_q_eval(observation)
+            #print('acacacacacacca',actions_value, 'zzzzzzzzzzzzzzzzzzzzzzzzzzz',np.argmax(actions_value))
             action = np.argmax(actions_value)
         else:
             action = np.random.randint(0, self.n_actions)
@@ -151,7 +153,7 @@ class DeepQNetwork:
 
                 qlearn_step +=1
                 stopflag  = self.cost < self.qlearn_tol or qlearn_step > self.max_qlearn_steps
-                print('cost', self.cost)
+                #print('cost', self.cost)
             self.cost_his.append(self.cost)
         else:
             batch_table_index = self.approx_by_table_entry(batch_memory[:, :self.n_features])  # np.argmin(np.sqrt((self.state_table -batch_memory[:, :self.n_features] )**2))- #todo generalize the distance
@@ -163,7 +165,7 @@ class DeepQNetwork:
         # increasing epsilon
         self.epsilon = self.epsilon + self.epsilon_increment if self.epsilon < self.epsilon_max else self.epsilon_max
         self.learn_step_counter += 1
-        print('learn counter', self.learn_step_counter)
+        print('learn counter', self.learn_step_counter, 'epsilon: ', self.epsilon)
 
     def plot_cost(self):
         import matplotlib.pyplot as plt
