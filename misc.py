@@ -7,13 +7,14 @@ class HP:
 class Recorder:
     def __init__(self,n=2):
         self.n = n
-        self.fig, self.ax = plt.subplots(n,3)
         self.records = []
         self.running_average_alpha = 1.0/1000.0
         self.running_averages = []
         for ii in range(self.n):
             self.records.append([])
             self.running_averages.append([0])
+        self.plotzero = True
+
 
     def record(self,this_item):
         for ii in range(self.n):
@@ -21,6 +22,9 @@ class Recorder:
             self.records[ii].append(this_item[ii])
             self.running_averages[ii].append(this_running_average)
     def plot(self):
+        if self.plotzero:
+            self.fig, self.ax = plt.subplots(self.n, 3)
+            self.plotzero = False
         for ii in range(self.n):
             self.ax[ii,0].clear()
             self.ax[ii,0].plot(self.records[ii])
