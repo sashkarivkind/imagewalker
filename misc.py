@@ -40,3 +40,10 @@ def magnify_image(img,factor):
 
 def image_from_np(img, scale=256,size_fac=1):
     return ImageTk.PhotoImage(image=Image.fromarray(scale*magnify_image(img,size_fac)))
+
+def mean_by_bins(x,y,xbins):
+    means=[]
+    for xmin,xmax in zip(xbins[:-1],xbins[1:]):
+        qq = np.logical_and(np.array(x)<=xmax,  np.array(x)>=xmin)
+        means.append(np.mean(np.array(y)[qq]))
+    return means

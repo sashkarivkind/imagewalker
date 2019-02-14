@@ -12,14 +12,18 @@ else:
 class Scene():
     def __init__(self,image_matrix = None):
         self.image = image_matrix
-        self.maxy, self.maxx = np.                  shape(image_matrix)
+        self.maxy, self.maxx = np.shape(image_matrix)
         self.hp = HP()
+
+    def edge_image_x(self,edge_location,contrast=1.0):
+        self.image = np.zeros(self.image.shape)
+        self.image[:,int(edge_location)] = contrast
 
 class Sensor():
     def __init__(self):
         self.hp = HP
-        self.hp.winx = 16
-        self.hp.winy = 16
+        self.hp.winx = 50
+        self.hp.winy = 26
         self.frame_size = self.hp.winx * self.hp.winy
         self.frame_view = np.zeros([self.hp.winy,self.hp.winx])
         self.dvs_view =self.dvs_fun(self.frame_view, self.frame_view)
@@ -50,7 +54,10 @@ class Agent():
 
 
     def act(self,a):
-        action = self.hp.action_space[a]
+        if a is None:
+            action = 'null'
+        else:
+            action = self.hp.action_space[a]
         #delta_a = 0.001
         if action == 'v_up':   # up
             self.qdot[1] = self.qdot[1] + 1 if self.q[1] < self.max_q[1]-1 else -0
