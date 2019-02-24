@@ -47,3 +47,12 @@ def mean_by_bins(x,y,xbins):
         qq = np.logical_and(np.array(x)<=xmax,  np.array(x)>=xmin)
         means.append(np.mean(np.array(y)[qq]))
     return means
+
+def kernel_weights_prep(n,m,w, kernel = None):
+    if kernel is None:
+        kernel = lambda x,mu: np.exp(-(x-mu)**2./(2.*w**2))/np.sqrt(np.pi)/w
+    wk=np.zeros([n,m])
+    for mm in range(m):
+        v = np.linspace(0,m-1,n)
+        wk[:,mm] = kernel(v,mm)
+    return wk
