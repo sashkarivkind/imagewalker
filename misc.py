@@ -5,8 +5,9 @@ class HP:
     pass
 
 class Recorder:
-    def __init__(self,n=2):
+    def __init__(self,n=2, do_fft = False):
         self.n = n
+        self.do_fft = do_fft
         self.records = []
         self.running_average_alpha = 1.0/1000.0
         self.running_averages = []
@@ -23,7 +24,7 @@ class Recorder:
             self.running_averages[ii].append(this_running_average)
     def plot(self):
         if self.plotzero:
-            self.fig, self.ax = plt.subplots(self.n, 3)
+            self.fig, self.ax = plt.subplots(self.n, 3 if self.do_fft else 2)
             self.plotzero = False
         for ii in range(self.n):
             self.ax[ii,0].clear()
@@ -31,8 +32,9 @@ class Recorder:
             self.ax[ii,0].plot(self.running_averages[ii])
             self.ax[ii,1].clear()
             self.ax[ii,1].plot(self.records[ii][-1000:])
-            self.ax[ii,2].clear()
-            self.ax[ii,2].plot(np.abs(np.fft.fft(self.records[ii][-10000:]))[:1000])
+            if self.do_fft:
+                self.ax[ii,2].clear()
+                self.ax[ii,2].plot(np.abs(np.fft.fft(self.records[ii][-10000:]))[:1000])
         plt.pause(0.05)
 
 def magnify_image(img,factor):

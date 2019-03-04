@@ -22,8 +22,8 @@ class Scene():
 class Sensor():
     def __init__(self):
         self.hp = HP
-        self.hp.winx = 50
-        self.hp.winy = 26
+        self.hp.winx = 10
+        self.hp.winy = 10
         self.frame_size = self.hp.winx * self.hp.winy
         self.frame_view = np.zeros([self.hp.winy,self.hp.winx])
         self.dvs_view =self.dvs_fun(self.frame_view, self.frame_view)
@@ -43,7 +43,7 @@ class Sensor():
 class Agent():
     def __init__(self,max_q = None):
         self.hp = HP()
-        self.hp.action_space = ['v_right','v_left','null'] #'
+        self.hp.action_space = [-2,-1,0,1,2] #['v_right','v_left','null'] #'
         self.hp.returning_force = 0.001 #0.00001
         self.max_q = max_q
         self.q_centre = np.array(self.max_q, dtype='f') / 2
@@ -59,7 +59,10 @@ class Agent():
         else:
             action = self.hp.action_space[a]
         #delta_a = 0.001
-        if action == 'v_up':   # up
+        if type(action)==int:
+            self.qdot[0] = action
+            self.qdotdot = np.array([0., 0.])
+        elif action == 'v_up':   # up
             self.qdot[1] = self.qdot[1] + 1 if self.q[1] < self.max_q[1]-1 else -0
             self.qdotdot = np.array([0., 0.])
         elif action == 'v_down':   # down

@@ -18,9 +18,9 @@ def run_env():
         observation = local_observer(sensor,agent)
         for step in range(hp.steps_per_episode):
             action = RL.choose_action(observation)
+            reward.update_rewards(sensor = sensor, agent = agent)
             agent.act(action)
             sensor.update(scene,agent)
-            reward.update_rewards(sensor = sensor, agent = agent)
             observation_  = local_observer(sensor,agent) #todo: generalize
             RL.store_transition(observation, action, reward.reward, observation_)
             recorder.record([agent.q_ana[0],agent.q[0],agent.qdot[0],reward.rewards[0],reward.rewards[1],reward.reward])
@@ -46,9 +46,9 @@ if __name__ == "__main__":
     RL = DeepQNetwork(len(agent.hp.action_space), sensor.hp.winx+2,#sensor.frame_size+2,
                       reward_decay=0.9,
                       e_greedy=0.95,
-                      e_greedy0=0.2,
-                      replace_target_iter=20,
-                      memory_size=3000,
+                      e_greedy0=0.25,
+                      replace_target_iter=10,
+                      memory_size=30000,
                       e_greedy_increment=0.001,
                       state_table=None
                       )

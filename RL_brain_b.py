@@ -32,7 +32,7 @@ class DeepQNetwork:
             replace_target_iter=30,
             memory_size=3000,
             # batch_size=512,
-            batch_size=2048,
+            batch_size=512,
             max_qlearn_steps = 1,
             qlearn_tol = 1e-2,
             e_greedy_increment=None,
