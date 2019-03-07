@@ -25,7 +25,7 @@ class DeepQNetwork:
             self,
             n_actions,
             n_features,
-            learning_rate=0.001,
+            learning_rate=0.1,
             reward_decay=0.9,
             e_greedy=0.9,
             e_greedy0=0.5,
@@ -95,7 +95,6 @@ class DeepQNetwork:
 
         if np.random.uniform() < self.epsilon:
             actions_value = self.compute_q_eval(observation)
-            #print('acacacacacacca',actions_value, 'zzzzzzzzzzzzzzzzzzzzzzzzzzz',np.argmax(actions_value))
             action = np.argmax(actions_value)
         else:
             action = np.random.randint(0, self.n_actions)
@@ -137,10 +136,10 @@ class DeepQNetwork:
 
             # change q_target w.r.t q_eval's action
             q_target = q_eval.copy()
-
+            self.debu1 = q_target.copy()
             # q_target[batch_index, eval_act_index] = reward + self.gamma * np.max(q_next, axis=1)
             q_target[batch_index, eval_act_index] = (1-self.table_alpha)*q_target[batch_index, eval_act_index] + self.table_alpha*(reward + self.gamma * np.max(q_next, axis=1))
-
+            self.debu2 = q_target.copy()
             stopflag = False
             qlearn_step = 0
             # train eval network
@@ -148,7 +147,6 @@ class DeepQNetwork:
             while not stopflag:
                 # print(batch_memory[:, :self.n_features])
                 # print('---------------------qqq:')
-                # print(q_target)
                 _, self.cost = self.dqn.training_step(batch_memory[:, :self.n_features],q_target)
 
                 qlearn_step +=1
