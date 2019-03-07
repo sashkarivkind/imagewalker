@@ -43,7 +43,8 @@ class Sensor():
 class Agent():
     def __init__(self,max_q = None):
         self.hp = HP()
-        self.hp.action_space = [-2,-1,0,1,2] #['v_right','v_left','null'] #'
+        #self.hp.action_space = [-2,-1,0,1,2]
+        self.hp.action_space = ['v_right','v_left','null'] #'
         self.hp.returning_force = 0.001 #0.00001
         self.max_q = max_q
         self.q_centre = np.array(self.max_q, dtype='f') / 2
