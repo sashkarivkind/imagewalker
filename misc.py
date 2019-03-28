@@ -58,3 +58,21 @@ def kernel_weights_prep(n,m,w, kernel = None):
         v = np.linspace(0,m-1,n)
         wk[:,mm] = kernel(v,mm)
     return wk
+
+def build_edge_states(maxx=10,vmax=10):
+    state_table = np.zeros([0,maxx+2])
+    for q in range(maxx):
+        for z in range(1,maxx-q):
+            for v in range(-vmax,vmax+1):
+                this_state = np.zeros([maxx+2])
+                this_state[q:q+z] = 1
+                this_state[maxx]=v
+                state_table = np.concatenate([state_table,[this_state]])
+    return state_table
+
+def max_by_different_argmax(a,b,axis=0):
+    cc = np.argmax(b,axis=axis)
+    if axis==0:
+        return a[cc,list(range(len(cc)))]
+    elif axis==1:
+        return a[list(range(len(cc))),cc]

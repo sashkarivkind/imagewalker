@@ -1,20 +1,13 @@
 """
-This part of code is the DQN brain, which is a brain of the agent.
-All decisions are made in here.
-Using Tensorflow to build the neural network.
+Was developed based on: https://morvanzhou.github.io/tutorials/
 
-View more on my tutorial page: https://morvanzhou.github.io/tutorials/
-
-Using:
-Tensorflow: 1.0
-gym: 0.7.3
 """
 
 import numpy as np
 import tensorflow as tf
 import scipy.spatial.distance as ssd
 import RL_networks as rlnet
-from misc import HP
+from misc import *
 np.random.seed(1)
 tf.set_random_seed(1)
 np.set_printoptions(threshold=np.nan)
@@ -35,13 +28,15 @@ class DeepQNetwork:
             batch_size=512,
             max_qlearn_steps = 1,
             qlearn_tol = 1e-2,
+            double_q = False,
             e_greedy_increment=None,
             output_graph=False,
-            state_table=None
-    ):
-        self.dqn_mode = True
+            state_table=None,
+            dqn_mode = True
+            ):
+        self.dqn_mode = dqn_mode
         self.hp = HP()
-        self.table_alpha = 0.1
+        self.table_alpha = 0.1 #0.1
         self.n_actions = n_actions
         self.n_features = n_features
         self.lr = learning_rate
@@ -51,6 +46,7 @@ class DeepQNetwork:
         self.replace_target_iter = replace_target_iter
         self.memory_size = memory_size
         self.batch_size = batch_size
+        self.double_q = double_q
         self.epsilon_increment = e_greedy_increment
         self.max_qlearn_steps = max_qlearn_steps
         self.qlearn_tol = qlearn_tol
@@ -93,18 +89,24 @@ class DeepQNetwork:
         # to have batch dimension when feed into tf placeholder
         observation = observation[np.newaxis, :]
 
+        actions_value = self.compute_q_eval(observation) #todo - this computation was taken out of if to ensure all states are added
         if np.random.uniform() < self.epsilon:
-            actions_value = self.compute_q_eval(observation)
             action = np.argmax(actions_value)
         else:
             action = np.random.randint(0, self.n_actions)
         return action
 
-    def compute_q_eval(self, state):
+    def compute_q_eval(self, state,match_th = 1e-5):
         if self.dqn_mode:
             return self.dqn.eval(state)
         else:
-            ii = np.argmin(np.sum((self.state_table - state)**2,axis=1)) #todo - generalize beyond eucledian distance
+            dd=(np.sum((self.state_table - state)**2,axis=1)) #todo - generalize beyond eucledian distance
+            if np.min(dd) < match_th:
+                ii = np.argmin(dd)
+            else:
+                self.state_table = np.vstack([self.state_table, state])
+                self.q_eval =np.vstack([self.q_eval,np.zeros([self.n_actions])])
+                ii = self.state_table.shape[0] - 1
             #print(ii, state)
             return self.q_eval[ii,:]
 
@@ -117,7 +119,7 @@ class DeepQNetwork:
             # check to replace target parameters
             if self.learn_step_counter % self.replace_target_iter == 0:
                 self.dqn.update_q_next()
-                print('\ntarget_params_replaced\n')
+                # print('\ntarget_params_replaced\n')
 
         # sample batch memory from all memory
         if self.memory_counter > self.memory_size:
@@ -138,7 +140,11 @@ class DeepQNetwork:
             q_target = q_eval.copy()
             self.debu1 = q_target.copy()
             # q_target[batch_index, eval_act_index] = reward + self.gamma * np.max(q_next, axis=1)
-            q_target[batch_index, eval_act_index] = (1-self.table_alpha)*q_target[batch_index, eval_act_index] + self.table_alpha*(reward + self.gamma * np.max(q_next, axis=1))
+            if self.double_q:
+                q_next_estim=max_by_different_argmax(q_next,q_eval,axis=1)
+            else:
+                q_next_estim=np.max(q_next, axis=1)
+            q_target[batch_index, eval_act_index] = (1-self.table_alpha)*q_target[batch_index, eval_act_index] + self.table_alpha*(reward + self.gamma * q_next_estim)
             self.debu2 = q_target.copy()
             stopflag = False
             qlearn_step = 0
@@ -163,7 +169,7 @@ class DeepQNetwork:
         # increasing epsilon
         self.epsilon = self.epsilon + self.epsilon_increment if self.epsilon < self.epsilon_max else self.epsilon_max
         self.learn_step_counter += 1
-        print('learn counter', self.learn_step_counter, 'epsilon: ', self.epsilon)
+        #print('learn counter', self.learn_step_counter, 'epsilon: ', self.epsilon)
 
     def plot_cost(self):
         import matplotlib.pyplot as plt

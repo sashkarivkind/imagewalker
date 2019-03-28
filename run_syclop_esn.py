@@ -4,19 +4,19 @@ import numpy as np
 import time
 import SYCLOP_env as syc
 from misc import *
+from reservoir import ESN
+import pickle
 hp=HP()
 hp.mem_depth = 2
 hp.max_episode = 30000
 hp.steps_per_episode = 1000
-hp.steps_between_learnings = 100
-
+hp.steps_between_learnings = 1000
 def local_observer(sensor,agent):
-    return np.concatenate([np.abs(sensor.dvs_view[5,:].reshape([-1])),1*agent.qdot,0.1*agent.q])
+    return np.concatenate([np.abs(sensor.dvs_view[5,:].reshape([-1])),1.0*agent.qdot])
 
 def run_env():
     old_policy_map=0
     step = 0
-    best_thus_far = -1e10
     for episode in range(hp.max_episode):
         observation = np.random.uniform(0,1,size=[hp.mem_depth, observation_size])
         observation_ = np.random.uniform(0,1,size=[hp.mem_depth, observation_size])
@@ -27,10 +27,11 @@ def run_env():
             reward.update_rewards(sensor = sensor, agent = agent)
             agent.act(action)
             sensor.update(scene,agent)
+            esn.step(uin=local_observer(sensor, agent))
             observation_[1:,:] = observation_[:-1,:]
-            observation_[0,:]  =  local_observer(sensor, agent)  # todo: generalize
+            observation_[0,:]  =  esn.r.reshape([-1]) # local_observer(sensor, agent)  # todo: generalize
             RL.store_transition(observation.reshape([-1]), action, reward.reward, observation_.reshape([-1]))
-            recorder.record([agent.q_ana[0],np.argmax(observation[0,:-2]),agent.qdot[0],reward.rewards[0],reward.rewards[1],reward.reward,RL.epsilon])
+            recorder.record([agent.q_ana[0],agent.q[0],agent.qdot[0],reward.rewards[0],reward.rewards[1],reward.reward])
             if (step > 100) and (step % hp.steps_between_learnings == 0):
                 RL.learn()
             observation = observation_
@@ -44,41 +45,34 @@ def run_env():
                 #     print('policy_change')
                 #     print(policy_map-old_policy_map)
                 #     print('--------------------------------')
-                if recorder.running_averages[3][-1] > best_thus_far:
-                    best_thus_far = recorder.running_averages[3][-1]
-                    RL.dqn.save_nwk_param('best_thus_farAdam.nwk')
-                    print('saved best network, mean reward: ', best_thus_far)
                 #     old_policy_map = policy_map
             if step%10000 ==0:
                     recorder.plot()
-                    # print('--------state table ----', RL.state_table.shape )
-                    RL.dqn.save_nwk_param('tempX_1.nwk')
-
-
+                    RL.dqn.save_nwk_param('temp5.nwk')
 
 if __name__ == "__main__":
 
     vertical_edge_mat = np.zeros([28,128])
     vertical_edge_mat[:,64:] = 1.0
-    recorder = Recorder(n=7)
-    #debu2el = np.diag(np.ones([10-1]),k=1)+np.eye(10)
+    recorder = Recorder(n=6)
+    debu2el = np.diag(np.ones([10-1]),k=1)+np.eye(10)
     # debu2el = debu2el[:-1,:]
 
     scene = syc.Scene(image_matrix=vertical_edge_mat)
     sensor = syc.Sensor()
     agent = syc.Agent(max_q = [scene.maxx-sensor.hp.winx,scene.maxy-sensor.hp.winy])
     reward = syc.Rewards()
-    observation_size = sensor.hp.winx + 2+2
+    esn = ESN(n_inputs=sensor.hp.winx+2)
+    # esn[orientation].win = kernel_weights_prep(esn[orientation].hp.N, 128, 5)
+    observation_size = esn.r.shape[0]
     RL = DeepQNetwork(len(agent.hp.action_space), observation_size*hp.mem_depth,#sensor.frame_size+2,
-                      reward_decay=0.90,
-                      e_greedy=0.95,
-                      e_greedy0=0.2,
-                      replace_target_iter=100,
-                      memory_size=30000,
-                      e_greedy_increment=0.0005,
-                      double_q=True,
-                      dqn_mode=True,
-                      state_table=np.zeros([1,observation_size*hp.mem_depth])
+                      reward_decay=0.9,
+                      e_greedy=0.90,
+                      e_greedy0=0.90,
+                      replace_target_iter=10,
+                      memory_size=300000,
+                      e_greedy_increment=0.001,
+                      state_table=None
                       )
 
 
@@ -87,7 +81,8 @@ if __name__ == "__main__":
     hp.agent = agent.hp
     hp.reward = reward.hp
     hp.RL = RL.hp
-
+    with open('temp_esn.pkl','wb') as f:
+        pickle.dump(esn,f)
     run_env()
 
 

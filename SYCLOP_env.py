@@ -98,7 +98,7 @@ class Agent():
 
 
 class Rewards():
-    def __init__(self,reward_types=['rms_intensity', 'speed'],relative_weights=[1,-0.01]):
+    def __init__(self,reward_types=['binary_intensity', 'speed'],relative_weights=[1.0,-0.01]):
         self.reward_obj_list = []
         self.hp=HP()
         self.hp.reward_types = reward_types
@@ -111,6 +111,8 @@ class Rewards():
                 this_reward = self.Reconstruction_reward()
             elif reward_type == 'rms_intensity':
                 this_reward = self.RMS_intensity_reward()
+            elif reward_type == 'binary_intensity':
+                this_reward = self.Binary_intensity_reward()
             elif reward_type == 'speed':
                 this_reward = self.Speed_reward()
             else:
@@ -144,16 +146,26 @@ class Rewards():
     class RMS_intensity_reward():
         def __init__(self):
             self.hp = HP()
-            self.hp.alpha_decay = 0.8
+            self.hp.alpha_decay = 1.0
             self.reward = 0
 
         def update(self, sensor = None, agent = None):
             self.reward = self.hp.alpha_decay*np.sqrt(np.mean(sensor.dvs_view ** 2)) + (1-self.hp.alpha_decay)*self.reward
 
+    class Binary_intensity_reward():
+        def __init__(self):
+            self.hp = HP()
+            self.hp.alpha_decay = 1.0
+            self.reward = 0
+            self.th = 1e-3
+
+        def update(self, sensor = None, agent = None):
+            self.reward = self.hp.alpha_decay*(np.sqrt(np.mean(sensor.dvs_view ** 2))>self.th) + (1-self.hp.alpha_decay)*self.reward
+
     class Speed_reward():
         def __init__(self):
             self.hp = HP()
-            self.hp.alpha_decay = 0.8
+            self.hp.alpha_decay = 1.0
             self.reward = 0
 
         def update(self, sensor = None, agent = None):
