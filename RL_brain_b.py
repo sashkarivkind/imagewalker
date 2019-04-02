@@ -18,13 +18,12 @@ class DeepQNetwork:
             self,
             n_actions,
             n_features,
-            learning_rate=0.1,
+            learning_rate=0.00025,
             reward_decay=0.9,
             e_greedy=0.9,
             e_greedy0=0.5,
             replace_target_iter=30,
             memory_size=3000,
-            # batch_size=512,
             batch_size=512,
             max_qlearn_steps = 1,
             qlearn_tol = 1e-2,
@@ -32,11 +31,12 @@ class DeepQNetwork:
             e_greedy_increment=None,
             output_graph=False,
             state_table=None,
-            dqn_mode = True
+            table_alpha = 1.0,
+            dqn_mode=True
             ):
         self.dqn_mode = dqn_mode
         self.hp = HP()
-        self.table_alpha = 0.1 #0.1
+        self.table_alpha = table_alpha
         self.n_actions = n_actions
         self.n_features = n_features
         self.lr = learning_rate
@@ -64,7 +64,7 @@ class DeepQNetwork:
             self.q_eval = np.zeros((np.shape(state_table)[0],n_actions))
         else:
             self.cost_his = []
-            self.dqn = rlnet.DQN_net(n_features, n_actions)
+            self.dqn = rlnet.DQN_net(n_features, n_actions, learning_rate=self.lr)
             self.dqn.sess = tf.Session()
             self.dqn.sess.run(tf.global_variables_initializer())
             self.dqn.reset()
@@ -94,9 +94,11 @@ class DeepQNetwork:
             action = np.argmax(actions_value)
         else:
             action = np.random.randint(0, self.n_actions)
+        self.current_val=np.max(actions_value) #todo debud
+        self.delta_val=np.max(actions_value)-np.min(actions_value) #todo debud
         return action
 
-    def compute_q_eval(self, state,match_th = 1e-5):
+    def compute_q_eval(self, state, match_th=1e-5):
         if self.dqn_mode:
             return self.dqn.eval(state)
         else:

@@ -22,16 +22,32 @@ class Scene():
 class Sensor():
     def __init__(self):
         self.hp = HP
-        self.hp.winx = 10
+        self.hp.winx = 70
         self.hp.winy = 10
+        self.hp.centralwinx = 10
+        self.hp.centralwiny = 10
+
+
+        self.cwx1 = (self.hp.winx-self.hp.centralwinx)//2
+        self.cwy1 = (self.hp.winy-self.hp.centralwiny)//2
+        self.cwx2 = self.cwx1 + self.hp.centralwinx
+        self.cwy2 = self.cwy1 + self.hp.centralwiny
         self.frame_size = self.hp.winx * self.hp.winy
+        self.reset()
+
+    def reset(self):
         self.frame_view = np.zeros([self.hp.winy,self.hp.winx])
+        self.central_frame_view = self.frame_view[self.cwy1:self.cwy2,self.cwx1:self.cwx2]
         self.dvs_view =self.dvs_fun(self.frame_view, self.frame_view)
+        self.central_dvs_view =self.dvs_view[self.cwy1:self.cwy2,self.cwx1:self.cwx2]
+
 
     def update(self,scene,agent):
         current_view = self.get_view(scene, agent)
         self.dvs_view =self.dvs_fun(current_view, self.frame_view)
+        self.central_dvs_view =self.dvs_view[self.cwy1:self.cwy2,self.cwx1:self.cwx2]
         self.frame_view = current_view
+        self.central_frame_view = self.frame_view[self.cwy1:self.cwy2,self.cwx1:self.cwx2]
 
     def dvs_fun(self,current_frame, previous_frame):
         return current_frame - previous_frame
@@ -43,11 +59,14 @@ class Sensor():
 class Agent():
     def __init__(self,max_q = None):
         self.hp = HP()
-        #self.hp.action_space = [-2,-1,0,1,2]
+        # self.hp.action_space =[-1,1]# [-3,-2,-1,0,1,2,3]
         self.hp.action_space = ['v_right','v_left','null'] #'
         self.hp.returning_force = 0.001 #0.00001
         self.max_q = max_q
         self.q_centre = np.array(self.max_q, dtype='f') / 2
+        self.reset()
+
+    def reset(self):
         self.q_ana = np.array([np.random.randint(self.max_q[0]), np.random.randint(self.max_q[1])], dtype='f')
         self.qdot = np.array([0.0,0.0])
         self.qdotdot = np.array([0.0,0.0])
@@ -98,7 +117,7 @@ class Agent():
 
 
 class Rewards():
-    def __init__(self,reward_types=['binary_intensity', 'speed'],relative_weights=[1.0,-0.01]):
+    def __init__(self,reward_types=['central_binary_intensity', 'speed','boundaries'],relative_weights=[1.0,-0.01, 0.0 ]):
         self.reward_obj_list = []
         self.hp=HP()
         self.hp.reward_types = reward_types
@@ -113,8 +132,14 @@ class Rewards():
                 this_reward = self.RMS_intensity_reward()
             elif reward_type == 'binary_intensity':
                 this_reward = self.Binary_intensity_reward()
+            elif reward_type == 'central_binary_intensity':
+                this_reward = self.Central_binary_intensity_reward()
+            elif reward_type == 'debug_central_binary_intensity':
+                this_reward = self.Debug_binary_intensity_reward()
             elif reward_type == 'speed':
                 this_reward = self.Speed_reward()
+            elif reward_type == 'boundaries':
+                this_reward = self.Boundary_reward()
             else:
                 error('unknown reward')
             self.reward_obj_list.append(this_reward)
@@ -170,3 +195,33 @@ class Rewards():
 
         def update(self, sensor = None, agent = None):
             self.reward = self.hp.alpha_decay*np.sqrt(np.mean(agent.qdot**2)) + (1-self.hp.alpha_decay)*self.reward
+
+    class Boundary_reward():
+        def __init__(self):
+            self.hp = HP()
+            self.hp.alpha_decay = 1.0
+            self.reward = 0
+
+        def update(self, sensor = None, agent = None):
+            self.reward = self.hp.alpha_decay*( (agent.q_ana[0] < 1) or (agent.q_ana[0]>agent.max_q[0]-1))\
+                          + (1-self.hp.alpha_decay)*self.reward
+
+    class Central_binary_intensity_reward():
+        def __init__(self):
+            self.hp = HP()
+            self.hp.alpha_decay = 1.0
+            self.reward = 0
+            self.th = 1e-3
+
+        def update(self, sensor = None, agent = None):
+            self.reward = self.hp.alpha_decay*(np.sqrt(np.mean(sensor.central_dvs_view ** 2))>self.th) + (1-self.hp.alpha_decay)*self.reward
+
+    class Debug_binary_intensity_reward(): #just
+        def __init__(self):
+            self.hp = HP()
+            self.hp.alpha_decay = 1.0
+            self.reward = 0
+            self.th = 1e-3
+
+        def update(self, sensor = None, agent = None):
+            self.reward = self.hp.alpha_decay*(np.sqrt(np.var(sensor.central_frame_view))>self.th) + (1-self.hp.alpha_decay)*self.reward

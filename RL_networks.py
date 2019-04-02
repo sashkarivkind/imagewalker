@@ -7,8 +7,8 @@ class HP():
     pass
 
 class DQN_net():
-    def __init__(self,n_features, n_actions,):
-        self.q_eval = Network(n_features, n_actions, trainable=True)
+    def __init__(self,n_features, n_actions, learning_rate):
+        self.q_eval = Network(n_features, n_actions, trainable=True, lr=learning_rate)
         self.q_next = Network(n_features, n_actions)
         self.sess = None
 
@@ -48,10 +48,9 @@ class DQN_net():
                 theta_list = pickle.load(f)
                 self.q_eval.theta_update(theta_list[0])
                 self.q_next.theta_update(theta_list[1])
-                #possibly add q_dual for double DQN in future
 
 class Network():
-    def __init__(self, n_features, n_actions, lr=0.00025, trainable = False):
+    def __init__(self, n_features, n_actions, lr=None, trainable = False):
         self.hp = HP()
         #self.default_nl=tf.nn.relu
         self.hp.lr = lr
@@ -63,6 +62,8 @@ class Network():
         self.q_target = tf.placeholder(tf.float32, [None, n_actions])
         if trainable:
             self.loss = tf.reduce_mean(tf.squared_difference(self.q_target, self.estimator))
+            # self.loss = tf.reduce_mean(tf.losses.absolute_difference(self.q_target, self.estimator))
+            # tf.losses.absolute_difference()
             # self.train_op = tf.train.GradientDescentOptimizer(self.hp.lr).minimize(self.loss)
             # self.train_op = tf.train.RMSPropOptimizer(self.hp.lr).minimize(self.loss)
             self.train_op = tf.train.AdamOptimizer(self.hp.lr).minimize(self.loss)
@@ -73,26 +74,27 @@ class Network():
         self.next_layer_id +=1
         return this_layer_id
 
-    def vanilla_network(self, layer_size = [None]+[200]*3+[ None]):
+    def vanilla_network(self, layer_size = [None]+[200]*1+[ None]):
         layer_size[0] = self.n_features
         layer_size[-1] = self.n_actions
         next_l = self.input_layer() #todo currently the  number of features in the input layer is defined elsewhere
         self.observations = next_l
         for ll, ll_size  in enumerate(layer_size[1:-1]):
             next_l = self.dense_ff_layer(next_l, ll_size)
+            # next_l = tf.nn.dropout(next_l, 0.95)
         ll_size=layer_size[-1]
-        next_l = self.dense_ff_layer(next_l, ll_size, nl= lambda x: x)
+        next_l = self.dense_ff_layer(next_l, ll_size, nl= lambda x: x,g=1e-10)
         return next_l
 
 
-    def dense_ff_layer(self, previous_layer, output_size, nl=tf.nn.tanh, theta = None):
+    def dense_ff_layer(self, previous_layer, output_size, nl=tf.nn.tanh, theta = None,g=1.0):
         if theta is None:
             this_theta = {}
             # print(np.float(np.shape(previous_layer)[-1])**0.5)
             this_theta['w'] = tf.Variable(
                 tf.random_normal(shape=[np.shape(previous_layer)[-1].value, output_size],
                                  mean=0.0,
-                                 stddev=2.0 / np.sqrt(np.shape(previous_layer)[-1].value)))
+                                 stddev=g*2.0 / np.sqrt(np.shape(previous_layer)[-1].value)))
             this_theta['b'] = tf.Variable(
                 tf.random_normal(shape=[1, output_size],
                                  mean=0.0,

@@ -1,5 +1,6 @@
 import matplotlib.pyplot as plt
 import numpy as np
+import pickle
 
 class HP:
     pass
@@ -36,6 +37,19 @@ class Recorder:
                 self.ax[ii,2].clear()
                 self.ax[ii,2].plot(np.abs(np.fft.fft(self.records[ii][-10000:]))[:1000])
         plt.pause(0.05)
+    def to_pickle(self):
+        return [self.records, self.running_averages]
+
+    def save(self,filename):
+        with open(filename, 'wb') as f:
+            pickle.dump(self.to_pickle(), f)
+
+    def load(self,filename):
+        with open(filename, 'rb') as f:
+            [self.records, self.running_averages] = pickle.load(f)
+            self.n = len(self.records)
+
+
 
 def magnify_image(img,factor):
     return np.kron(img,np.ones([factor,factor]))
