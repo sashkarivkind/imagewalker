@@ -10,22 +10,38 @@ else:
     import tkinter as tk
 
 class Scene():
-    def __init__(self,image_matrix = None):
-        self.image = image_matrix
-        self.maxy, self.maxx = np.shape(image_matrix)
+    def __init__(self,image_matrix = None, frame_list = None ):
+        if image_matrix is not None:
+            self.image = image_matrix
+        if frame_list is not None:
+            self.movie_mode = True
+            self.current_frame = 0
+            self.frame_list = frame_list
+            self.total_frames = len(self.frame_list)
+            self.image = self.frame_list[self.current_frame]
+        self.maxy, self.maxx = np.shape(self.image)
         self.hp = HP()
 
     def edge_image_x(self,edge_location,contrast=1.0):
         self.image = np.zeros(self.image.shape)
         self.image[:,int(edge_location)] = contrast
 
+    def update(self):
+        if self.movie_mode:
+            self.current_frame = (self.current_frame+1)%self.total_frames
+            self.image = self.frame_list[self.current_frame]
+        else:
+            error #not implemented yet
+
 class Sensor():
-    def __init__(self):
+    def __init__(self, log_mode=False, log_floor = 1e-3):
         self.hp = HP
-        self.hp.winx = 70
-        self.hp.winy = 10
-        self.hp.centralwinx = 10
-        self.hp.centralwiny = 10
+        self.hp.winx = 16*4
+        self.hp.winy = 16*4
+        self.hp.centralwinx = 4*4
+        self.hp.centralwiny = 4*4
+        self.log_mode = log_mode
+        self.log_floor = log_floor
 
 
         self.cwx1 = (self.hp.winx-self.hp.centralwinx)//2
@@ -50,7 +66,11 @@ class Sensor():
         self.central_frame_view = self.frame_view[self.cwy1:self.cwy2,self.cwx1:self.cwx2]
 
     def dvs_fun(self,current_frame, previous_frame):
-        return current_frame - previous_frame
+        delta = current_frame - previous_frame
+        if self.log_mode:
+            return (np.log10(np.abs(delta)+self.log_floor)-np.log(self.log_floor))*np.sign(delta)
+        else:
+            return current_frame - previous_frame
 
     def get_view(self,scene,agent):
         return scene.image[scene.maxy - agent.q[1] - self.hp.winy: scene.maxy - agent.q[1],
@@ -60,7 +80,7 @@ class Agent():
     def __init__(self,max_q = None):
         self.hp = HP()
         # self.hp.action_space =[-1,1]# [-3,-2,-1,0,1,2,3]
-        self.hp.action_space = ['v_right','v_left','null'] #'
+        self.hp.action_space = ['v_right','v_left','v_up','v_down','null'] #'
         self.hp.returning_force = 0.001 #0.00001
         self.max_q = max_q
         self.q_centre = np.array(self.max_q, dtype='f') / 2
@@ -117,7 +137,7 @@ class Agent():
 
 
 class Rewards():
-    def __init__(self,reward_types=['central_binary_intensity', 'speed','boundaries'],relative_weights=[1.0,-0.01, 0.0 ]):
+    def __init__(self,reward_types=['central_rms_intensity', 'speed','boundaries'],relative_weights=[1.0e-3,-0.0, 0.0 ]):
         self.reward_obj_list = []
         self.hp=HP()
         self.hp.reward_types = reward_types
@@ -130,6 +150,10 @@ class Rewards():
                 this_reward = self.Reconstruction_reward()
             elif reward_type == 'rms_intensity':
                 this_reward = self.RMS_intensity_reward()
+            elif reward_type == 'central_homeostatic_intensity':
+                this_reward = self.Central_homeostatic_intensity_reward()
+            elif reward_type == 'central_rms_intensity':
+                this_reward = self.Central_RMS_intensity_reward()
             elif reward_type == 'binary_intensity':
                 this_reward = self.Binary_intensity_reward()
             elif reward_type == 'central_binary_intensity':
@@ -176,6 +200,28 @@ class Rewards():
 
         def update(self, sensor = None, agent = None):
             self.reward = self.hp.alpha_decay*np.sqrt(np.mean(sensor.dvs_view ** 2)) + (1-self.hp.alpha_decay)*self.reward
+
+    class Central_RMS_intensity_reward():
+        def __init__(self):
+            self.hp = HP()
+            self.hp.alpha_decay = 1.0
+            self.reward = 0
+            self.th = 1e-3
+
+        def update(self, sensor = None, agent = None):
+            self.reward = self.hp.alpha_decay*np.sqrt(np.mean((1.0*sensor.central_dvs_view) ** 2))  + (1-self.hp.alpha_decay)*self.reward
+
+    class Central_homeostatic_intensity_reward():
+        def __init__(self):
+            self.hp = HP()
+            self.hp.alpha_decay = 1.0
+            self.hp.target_intensity = 0.5
+            self.reward = 0
+            self.th = 1e-3
+
+        def update(self, sensor = None, agent = None):
+            self.reward = self.hp.alpha_decay*np.sqrt(np.mean(sensor.central_dvs_view ** 2)) + (1-self.hp.alpha_decay)*self.reward
+            self.reward = -np.abs(self.reward-self.hp.target_intensity)
 
     class Binary_intensity_reward():
         def __init__(self):

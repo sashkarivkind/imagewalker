@@ -74,7 +74,7 @@ class Network():
         self.next_layer_id +=1
         return this_layer_id
 
-    def vanilla_network(self, layer_size = [None]+[200]*1+[ None]):
+    def vanilla_network(self, layer_size = [None]+[200]*3+[ None]):
         layer_size[0] = self.n_features
         layer_size[-1] = self.n_actions
         next_l = self.input_layer() #todo currently the  number of features in the input layer is defined elsewhere

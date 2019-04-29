@@ -1,6 +1,9 @@
 import matplotlib.pyplot as plt
 import numpy as np
 import pickle
+import glob
+from scipy import misc
+
 
 class HP:
     pass
@@ -90,3 +93,19 @@ def max_by_different_argmax(a,b,axis=0):
         return a[cc,list(range(len(cc)))]
     elif axis==1:
         return a[list(range(len(cc))),cc]
+
+def pwl_to_wave(pwl):
+    w_prev=[0,pwl[0][1]]
+    wave =[]
+    for w_this in pwl:
+        wave += list(np.linspace(w_prev[1],w_this[1],max(w_this[0]-w_prev[0]+1,0)))[1:]
+        w_prev = w_this
+    return wave
+
+def read_images_from_path(path = None, filenames = None):
+    if filenames is None:
+        filenames = sorted(glob.glob(path))
+    images=[]
+    for image_path in filenames:
+        images.append( misc.imread(image_path))
+    return images
