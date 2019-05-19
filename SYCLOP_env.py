@@ -80,7 +80,9 @@ class Agent():
     def __init__(self,max_q = None):
         self.hp = HP()
         # self.hp.action_space =[-1,1]# [-3,-2,-1,0,1,2,3]
-        self.hp.action_space = ['v_right','v_left','v_up','v_down','null'] #'
+        # self.hp.action_space = ['v_right','v_left','v_up','v_down','null'] #'
+        self.hp.action_space = ['v_right','v_left','v_up','v_down','null'] + \
+                               [['v_right','v_up'],['v_right','v_down'],['v_left','v_up'],['v_left','v_down']]#'
         self.hp.returning_force = 0.001 #0.00001
         self.max_q = max_q
         self.q_centre = np.array(self.max_q, dtype='f') / 2
@@ -99,6 +101,21 @@ class Agent():
         else:
             action = self.hp.action_space[a]
         #delta_a = 0.001
+        if type(action) == list:
+            for subaction in action:
+                self.parse_action(subaction)
+        else:
+            self.parse_action(action)
+
+        #print('debug', self.max_q, self.q_centre)
+        self.qdot += self.qdotdot
+        #self.qdot -= self.hp.returning_force*(self.q_ana-self.q_centre)
+        self.q_ana +=self.qdot
+        self.q_ana = np.minimum(self.q_ana,self.max_q)
+        self.q_ana = np.maximum(self.q_ana,[0.0,0.0])
+        self.q = np.int32(np.floor(self.q_ana))
+
+    def parse_action(self,action):
         if type(action)==int:
             self.qdot[0] = action
             self.qdotdot = np.array([0., 0.])
@@ -127,17 +144,8 @@ class Agent():
         else:
             error('unknown action')
 
-        #print('debug', self.max_q, self.q_centre)
-        self.qdot += self.qdotdot
-        #self.qdot -= self.hp.returning_force*(self.q_ana-self.q_centre)
-        self.q_ana +=self.qdot
-        self.q_ana = np.minimum(self.q_ana,self.max_q)
-        self.q_ana = np.maximum(self.q_ana,[0.0,0.0])
-        self.q = np.int32(np.floor(self.q_ana))
-
-
 class Rewards():
-    def __init__(self,reward_types=['central_rms_intensity', 'speed','boundaries'],relative_weights=[1.0e-3,-0.0, 0.0 ]):
+    def __init__(self,reward_types=['central_rms_intensity', 'speed','boundaries'],relative_weights=[0.1,0.0, 0 ]):
         self.reward_obj_list = []
         self.hp=HP()
         self.hp.reward_types = reward_types
@@ -249,7 +257,7 @@ class Rewards():
             self.reward = 0
 
         def update(self, sensor = None, agent = None):
-            self.reward = self.hp.alpha_decay*( (agent.q_ana[0] < 1) or (agent.q_ana[0]>agent.max_q[0]-1))\
+            self.reward = self.hp.alpha_decay*( (agent.q_ana[0] < 1) or (agent.q_ana[0]>agent.max_q[0]-1) or (agent.q_ana[1] < 1) or (agent.q_ana[1]>agent.max_q[1]-1))\
                           + (1-self.hp.alpha_decay)*self.reward
 
     class Central_binary_intensity_reward():
