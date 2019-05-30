@@ -145,7 +145,7 @@ class Agent():
             error('unknown action')
 
 class Rewards():
-    def __init__(self,reward_types=['central_rms_intensity', 'speed','boundaries'],relative_weights=[0.1,0.0, 0 ]):
+    def __init__(self,reward_types=['central_rms_intensity'],relative_weights=[1.0]):
         self.reward_obj_list = []
         self.hp=HP()
         self.hp.reward_types = reward_types

@@ -29,7 +29,7 @@ class DQN_net():
                   feed_dict={self.q_eval.observations: observations,
                              self.q_eval.q_target: q_target})
 
-    def eval(self,observations):
+    def eval(self,observations):   #todo rename!!! eval is a reserved word
         return self.sess.run(self.q_eval.estimator,
                   feed_dict={self.q_eval.observations: observations})
 
@@ -74,7 +74,7 @@ class Network():
         self.next_layer_id +=1
         return this_layer_id
 
-    def vanilla_network(self, layer_size = [None]+[200]*3+[ None]):
+    def vanilla_network(self, layer_size = [None]+[400]+[200]*3+[ None]):
         layer_size[0] = self.n_features
         layer_size[-1] = self.n_actions
         next_l = self.input_layer() #todo currently the  number of features in the input layer is defined elsewhere
