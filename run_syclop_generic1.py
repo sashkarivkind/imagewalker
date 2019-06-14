@@ -12,7 +12,7 @@ import cv2
 hp=HP()
 hp.save_path = 'saved_runs'
 hp.this_run_name = sys.argv[0] + '_noname_' + str(int(time.time()))
-hp.description = "running some stills from something something database, statring from  RL.dqn.save_nwk_param('liron_encircle.nwk')"
+hp.description = "resized mnist, first 300 images, penalty for speed"
 hp.mem_depth = 1
 hp.max_episode =  10000
 hp.steps_per_episode = 100
@@ -22,7 +22,6 @@ recorder_file = 'records.pkl'
 hp_file = 'hp.pkl'
 hp.contrast_range = [1.0,1.1]
 hp.logmode = False
-from mnist import MNIST
 
 
 
@@ -62,9 +61,11 @@ def run_env():
         for step_prime in range(hp.steps_per_episode):
             action = RL.choose_action(observation.reshape([-1]))
             reward.update_rewards(sensor = sensor, agent = agent)
-            running_ave_reward = 0.999*running_ave_reward+0.001*reward.reward
+            running_ave_reward = 0.999*running_ave_reward+0.001*np.array([reward.reward]+reward.rewards.tolist())
             if step % 10000 < 1000:
-                recorder.record([agent.q_ana[0],agent.q_ana[1],reward.reward,RL.epsilon])
+                # print([agent.q_ana[0], agent.q_ana[1], reward.reward] , reward.rewards , [RL.epsilon])
+                # print(type([agent.q_ana[0], agent.q_ana[1], reward.reward]) , type(reward.rewards), type([RL.epsilon]))
+                recorder.record([agent.q_ana[0],agent.q_ana[1],reward.reward]+reward.rewards.tolist()+[RL.epsilon])
             agent.act(action)
             sensor.update(scene,agent)
             # scene.update()
@@ -78,8 +79,8 @@ def run_env():
             if step%1000 ==0:
                 print(episode,step,' running reward   ',running_ave_reward)
                 print('frame:', scene.current_frame,)
-                if running_ave_reward > best_thus_far:
-                    best_thus_far = running_ave_reward
+                if running_ave_reward[0] > best_thus_far:
+                    best_thus_far = running_ave_reward[0]
                     RL.dqn.save_nwk_param(hp.this_run_path+'best_liron.nwk')
                     print('saved best network, mean reward: ', best_thus_far)
             if step%10000 ==0:
@@ -93,10 +94,10 @@ def run_env():
 
 if __name__ == "__main__":
 
-    recorder = Recorder(n=4)
+    recorder = Recorder(n=6)
 
-    images = read_images_from_path('/home/bnapp/arivkindNet/video_datasets/stills_from_videos/some100img_from20bn/*')
-
+    # images = read_images_from_path('/home/bnapp/arivkindNet/video_datasets/stills_from_videos/some100img_from20bn/*')
+    images = some_resized_mnist(n=400)
     # images = [np.sum(1.0*uu, axis=2) for uu in images]
     # images = [cv2.resize(uu, dsize=(256, 256-64), interpolation=cv2.INTER_AREA) for uu in images]
     if hp.logmode:
@@ -110,7 +111,7 @@ if __name__ == "__main__":
     sensor = syc.Sensor( log_mode=False, log_floor = 1.0)
     agent = syc.Agent(max_q = [scene.maxx-sensor.hp.winx,scene.maxy-sensor.hp.winy])
 
-    reward = syc.Rewards()
+    reward = syc.Rewards(reward_types=['central_rms_intensity', 'speed'],relative_weights=[1.0,-float(sys.argv[1])])
     # observation_size = sensor.hp.winx*sensor.hp.winy*2
     observation_size = 256*4
     RL = DeepQNetwork(len(agent.hp.action_space), observation_size*hp.mem_depth,#sensor.frame_size+2,
@@ -126,7 +127,7 @@ if __name__ == "__main__":
                       state_table=np.zeros([1,observation_size*hp.mem_depth])
                       )
     # RL.dqn.load_nwk_param('tempX_1.nwk')
-    RL.dqn.save_nwk_param('liron_encircle.nwk')
+    # RL.dqn.save_nwk_param('liron_encircle.nwk')
     hp.scene = scene.hp
     hp.sensor = sensor.hp
     hp.agent = agent.hp
