@@ -3,10 +3,27 @@ import numpy as np
 import pickle
 import glob
 from scipy import misc
+from mnist import MNIST
+import cv2
 
 
 class HP:
     pass
+
+class Logger:
+    def __init__(self,log_name):
+        self.terminal = sys.stdout
+        self.log = open(log_name, "w")
+
+    def write(self, message):
+        self.terminal.write(message)
+        self.log.write(message)
+
+    def flush(self):
+        #this flush method is needed for python 3 compatibility.
+        #this handles the flush command by doing nothing.
+        #you might want to specify some extra behavior here.
+        pass
 
 class Recorder:
     def __init__(self,n=2, do_fft = False):
@@ -102,10 +119,24 @@ def pwl_to_wave(pwl):
         w_prev = w_this
     return wave
 
-def read_images_from_path(path = None, filenames = None):
+def read_images_from_path(path = None, filenames = None, max_image=1e7):
     if filenames is None:
         filenames = sorted(glob.glob(path))
     images=[]
-    for image_path in filenames:
-        images.append( misc.imread(image_path))
+    for cnt, image_path in enumerate(filenames):
+        if cnt<max_image:
+            images.append( misc.imread(image_path))
+        else:
+            break
     return images
+
+def relu_up_and_down(x,downsample_fun = lambda x: x):
+    x=downsample_fun(x)
+    up_down_views = [np.maximum(x,0), -np.minimum(x,0)]
+    return np.concatenate([downsample_fun(uu).reshape([-1]) for uu in up_down_views])
+
+def some_resized_mnist(size=(256,256), n=100,path='/home/bnapp/datasets/mnist/'):
+    mnist = MNIST(path)
+    images, labels = mnist.load_training()
+    some_mnist =[ cv2.resize(1.+np.reshape(uu,[28,28]), dsize=size) for uu in images[:n]]
+    return some_mnist
