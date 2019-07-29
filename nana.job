@@ -1,0 +1,5 @@
+#BSUB -q new-medium
+#BSUB -J example
+#BSUB -o example-%J.o
+#BSUB -e example-%J.e
+python3 run_syclop_generic2.py 12 0.9

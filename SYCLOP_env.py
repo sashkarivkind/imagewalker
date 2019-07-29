@@ -150,8 +150,11 @@ class Rewards():
         self.hp=HP()
         self.hp.reward_types = reward_types
         self.hp.relative_weights = relative_weights
+        self.reset()
+
+    def reset(self):
         self.reward = 0
-        self.rewards = np.zeros([len(reward_types)])
+        self.rewards = np.zeros([len(self.hp.reward_types)])
         self.hp.reward_hp = {}
         for reward_type in self.hp.reward_types:
             if reward_type == 'reconstruct':

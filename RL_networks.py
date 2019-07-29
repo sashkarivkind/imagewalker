@@ -33,10 +33,6 @@ class DQN_net():
         return self.sess.run(self.q_eval.estimator,
                   feed_dict={self.q_eval.observations: observations})
 
-    def eval_incl_layers(self,observations):
-        return self.sess.run([self.q_eval.estimator]+[self.q_eval.layers[uu] for uu in sorted(self.q_eval.layers.keys())],
-                  feed_dict={self.q_eval.observations: observations})
-
     def eval_next(self,observations):
         return  self.sess.run(self.q_next.estimator,
                   feed_dict={self.q_next.observations: observations})
@@ -59,7 +55,6 @@ class Network():
         #self.default_nl=tf.nn.relu
         self.hp.lr = lr
         self.next_layer_id = 0
-        self.layers = {}
         self.n_features = n_features
         self.n_actions = n_actions
         self.theta = {}
@@ -88,7 +83,7 @@ class Network():
             next_l = self.dense_ff_layer(next_l, ll_size)
             # next_l = tf.nn.dropout(next_l, 0.95)
         ll_size=layer_size[-1]
-        next_l = self.dense_ff_layer(next_l, ll_size, nl= lambda x: x, g=1e-10)
+        next_l = self.dense_ff_layer(next_l, ll_size, nl= lambda x: x,g=1e-10)
         return next_l
 
 
@@ -106,10 +101,10 @@ class Network():
                                  stddev=0.01))
         else:
             error('explicit theta is still unsupported')
-        layer_id=self.get_layer_id()
-        self.theta[layer_id] = this_theta
-        self.layers[layer_id] = nl(tf.matmul(previous_layer, this_theta['w']) + this_theta['b'])
-        return self.layers[layer_id]
+        self.theta[self.get_layer_id()] = this_theta
+        #print(self.get_layer_id())
+        ff_layer = nl(tf.matmul(previous_layer, this_theta['w']) + this_theta['b'])
+        return ff_layer
 
     def input_layer(self):
         return tf.placeholder(tf.float32, [None, self.n_features])

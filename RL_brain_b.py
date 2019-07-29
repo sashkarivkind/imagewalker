@@ -10,7 +10,7 @@ import RL_networks as rlnet
 from misc import *
 np.random.seed(1)
 tf.set_random_seed(1)
-np.set_printoptions(threshold=np.nan)
+#np.set_printoptions(threshold=np.nan)
 
 # Deep Q Network off-policy
 class DeepQNetwork:

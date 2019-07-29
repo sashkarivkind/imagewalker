@@ -1,0 +1,24 @@
+#!/bin/sh
+
+try1=0
+
+param1=(0 5 10 12)
+param2=(0 0.1 0.3 0.5 0.7 0.9)
+maxtry1=4 #${param[@]}
+maxtry2=6
+while [ $try1 -lt $maxtry1 ]
+do
+try2=0
+while [ $try2 -lt $maxtry2 ]
+do
+
+
+cat iter.job <(echo python3 run_syclop_generic2.py ${param1[$try1]}  ${param2[$try2]} )  > nana.job
+
+bsub  -R "select[mem>4096] rusage[mem=4000]" <nana.job
+#bsub  -R "select[mem>4096] rusage[mem=4000]" <(cat iter.job <(echo python3 run_syclop_generic1.py ${param[$try]} ) )  
+try2=`expr $try2 + 1`
+sleep .01
+done
+try1=`expr $try1 + 1`
+done

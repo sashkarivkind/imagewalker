@@ -1,0 +1,4 @@
+#BSUB -q new-medium
+#BSUB -J example
+#BSUB -o example-%J.o
+#BSUB -e example-%J.e

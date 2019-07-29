@@ -1,4 +1,3 @@
-#from image_env_mnist1 import Image_env1
 from RL_brain_b import DeepQNetwork
 import numpy as np
 import time
@@ -13,15 +12,15 @@ hp=HP()
 hp.save_path = 'saved_runs'
 hp.this_run_name = sys.argv[0] + '_noname_' + str(int(100000000*time.time()))
 #hp.description = "resized mnist, first 300 images, penalty for speed, flexible fading const"
-hp.description = "some images from something-something video dataset, penalty for speed, flexible fading const"
+hp.description = "mnist with contrast binary  +/-1, penalty for speed, flexible fading const"
 hp.mem_depth = 1
-hp.max_episode =  10000
+hp.max_episode =  50000
 hp.steps_per_episode = 100
 hp.steps_between_learnings = 100
 hp.fading_mem = float(sys.argv[2]) # 0.5
 recorder_file = 'records.pkl'
 hp_file = 'hp.pkl'
-hp.contrast_range = [1.0,1.1]
+hp.contrast_range = [-1.0,1.0]
 hp.logmode = False
 
 
@@ -49,7 +48,7 @@ def run_env():
         observation = np.random.uniform(0,1,size=[hp.mem_depth, observation_size])
         observation_ = np.random.uniform(0,1,size=[hp.mem_depth, observation_size])
         scene.current_frame = np.random.choice(scene.total_frames)
-        scene.image = scene.frame_list[scene.current_frame]
+        scene.image = scene.frame_list[scene.current_frame] * np.sign(np.random.uniform(hp.contrast_range[0],hp.contrast_range[1]))
 
         agent.reset()
         # agent.q_ana[1]=256./2.-32
@@ -63,7 +62,7 @@ def run_env():
             action = RL.choose_action(observation.reshape([-1]))
             reward.update_rewards(sensor = sensor, agent = agent)
             running_ave_reward = 0.999*running_ave_reward+0.001*np.array([reward.reward]+reward.rewards.tolist())
-            if step % 10000 < 1000:
+            if step % 50000 < 1000:
                 # print([agent.q_ana[0], agent.q_ana[1], reward.reward] , reward.rewards , [RL.epsilon])
                 # print(type([agent.q_ana[0], agent.q_ana[1], reward.reward]) , type(reward.rewards), type([RL.epsilon]))
                 recorder.record([agent.q_ana[0],agent.q_ana[1],reward.reward]+reward.rewards.tolist()+[RL.epsilon])
@@ -97,8 +96,8 @@ if __name__ == "__main__":
 
     recorder = Recorder(n=6)
 
-    images = read_images_from_path('../video_datasets/stills_from_videos/some100img_from20bn/*')
-    #images = some_resized_mnist(n=400)
+    #images = read_images_from_path('../video_datasets/stills_from_videos/some100img_from20bn/*')
+    images = some_resized_mnist(n=400)
     # images = [np.sum(1.0*uu, axis=2) for uu in images]
     # images = [cv2.resize(uu, dsize=(256, 256-64), interpolation=cv2.INTER_AREA) for uu in images]
     if hp.logmode:

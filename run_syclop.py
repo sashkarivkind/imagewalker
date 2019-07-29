@@ -10,7 +10,7 @@ hp.steps_per_episode = 10000
 hp.steps_between_learnings = 1000
 
 def local_observer(sensor,agent):
-    return np.abs(np.concatenate([sensor.dvs_view[5,:].reshape([-1])])) #,10*agent.qdot])
+    return np.concatenate([np.abs(sensor.dvs_view[5,:].reshape([-1])),10*agent.qdot])
 
 def run_env():
     old_policy_map=0
@@ -31,17 +31,17 @@ def run_env():
             step += 1
             if step%1000 ==0:
                 print(episode,step)
-                policy_map = np.array([np.argmax(RL.compute_q_eval(np.eye(10)), axis=1),
-                                        np.argmax(RL.compute_q_eval(debu2el), axis=1)])
-                if np.max(np.abs(old_policy_map - policy_map))>0:
-                    print(policy_map)
-                    print('policy_change')
-                    print(policy_map-old_policy_map)
-                    print('--------------------------------')
-                    old_policy_map = policy_map
+                # policy_map = np.array([np.argmax(RL.compute_q_eval(np.eye(10)), axis=1),
+                #                         np.argmax(RL.compute_q_eval(debu2el), axis=1)])
+                # if np.max(np.abs(old_policy_map - policy_map))>0:
+                #     print(policy_map)
+                #     print('policy_change')
+                #     print(policy_map-old_policy_map)
+                #     print('--------------------------------')
+                #     old_policy_map = policy_map
             if step%10000 ==0:
                     recorder.plot()
-                    RL.dqn.save_nwk_param('temp.nwk')
+                    RL.dqn.save_nwk_param('temp3.nwk')
 
 if __name__ == "__main__":
 
@@ -55,13 +55,13 @@ if __name__ == "__main__":
     sensor = syc.Sensor()
     agent = syc.Agent(max_q = [scene.maxx-sensor.hp.winx,scene.maxy-sensor.hp.winy])
     reward = syc.Rewards()
-    RL = DeepQNetwork(len(agent.hp.action_space), sensor.hp.winx,#sensor.frame_size+2,
+    RL = DeepQNetwork(len(agent.hp.action_space), sensor.hp.winx+2,#sensor.frame_size+2,
                       reward_decay=0.9,
                       e_greedy=0.99,
                       e_greedy0=0.25,
                       replace_target_iter=10,
                       memory_size=30000,
-                      e_greedy_increment=0.0001,
+                      e_greedy_increment=0.001,
                       state_table=None
                       )
 
