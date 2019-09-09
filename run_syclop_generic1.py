@@ -1,4 +1,4 @@
-#from image_env_mnist1 import Image_env1
+                                                                                                                                                                                                                                                                                                                                        #from image_env_mnist1 import Image_env1
 from RL_brain_b import DeepQNetwork
 import numpy as np
 import time
@@ -8,17 +8,16 @@ import SYCLOP_env as syc
 from misc import *
 import sys
 import os
-import cv2 
+import cv2
 hp=HP()
 hp.save_path = 'saved_runs'
-hp.this_run_name = sys.argv[0] + '_noname_' + str(int(100000000*time.time()))
-#hp.description = "resized mnist, first 300 images, penalty for speed, flexible fading const"
-hp.description = "some images from something-something video dataset, penalty for speed, flexible fading const"
+hp.this_run_name = sys.argv[0] + '_noname_' + str(int(time.time()))
+hp.description = "resized mnist, first 300 images, penalty for speed"
 hp.mem_depth = 1
 hp.max_episode =  10000
 hp.steps_per_episode = 100
 hp.steps_between_learnings = 100
-hp.fading_mem = float(sys.argv[2]) # 0.5
+hp.fading_mem = 0.5
 recorder_file = 'records.pkl'
 hp_file = 'hp.pkl'
 hp.contrast_range = [1.0,1.1]
@@ -85,7 +84,7 @@ def run_env():
                     RL.dqn.save_nwk_param(hp.this_run_path+'best_liron.nwk')
                     print('saved best network, mean reward: ', best_thus_far)
             if step%10000 ==0:
-                    #recorder.plot()
+                    recorder.plot()
                     RL.dqn.save_nwk_param(hp.this_run_path+'tempX_1.nwk')
                     # debug_policy_plot()
             if step % 100000 == 0:
@@ -97,8 +96,8 @@ if __name__ == "__main__":
 
     recorder = Recorder(n=6)
 
-    images = read_images_from_path('../video_datasets/stills_from_videos/some100img_from20bn/*')
-    #images = some_resized_mnist(n=400)
+    # images = read_images_from_path('/home/bnapp/arivkindNet/video_datasets/stills_from_videos/some100img_from20bn/*')
+    images = some_resized_mnist(n=400)
     # images = [np.sum(1.0*uu, axis=2) for uu in images]
     # images = [cv2.resize(uu, dsize=(256, 256-64), interpolation=cv2.INTER_AREA) for uu in images]
     if hp.logmode:
@@ -125,7 +124,9 @@ if __name__ == "__main__":
                       learning_rate=0.0025,
                       double_q=True,
                       dqn_mode=True,
-                      state_table=np.zeros([1,observation_size*hp.mem_depth])
+                      state_table=np.zeros([1,observation_size*hp.mem_depth]),
+                      soft_q_type='boltzmann',
+                      beta=0.1
                       )
     # RL.dqn.load_nwk_param('tempX_1.nwk')
     # RL.dqn.save_nwk_param('liron_encircle.nwk')

@@ -10,7 +10,7 @@ import RL_networks as rlnet
 from misc import *
 np.random.seed(1)
 tf.set_random_seed(1)
-#np.set_printoptions(threshold=np.nan)
+# np.set_printoptions(threshold=np.nan)
 
 # Deep Q Network off-policy
 class DeepQNetwork:
@@ -32,10 +32,32 @@ class DeepQNetwork:
             output_graph=False,
             state_table=None,
             table_alpha = 1.0,
-            dqn_mode=True
+            dqn_mode=True,
+            soft_q_type=None, #'boltzmann'
+            beta=1
             ):
-        self.dqn_mode = dqn_mode
+
         self.hp = HP()
+        #todo: a more elegant integration between hyper parameters and other attributes of RL.
+        self.hp.dqn_mode = dqn_mode
+        self.hp.table_alpha = table_alpha
+        self.hp.n_actions = n_actions
+        self.hp.n_features = n_features
+        self.hp.lr = learning_rate
+        self.hp.gamma = reward_decay
+        self.hp.epsilon_max = e_greedy
+        self.hp.epsilon0 = e_greedy0
+        self.hp.replace_target_iter = replace_target_iter
+        self.hp.memory_size = memory_size
+        self.hp.batch_size = batch_size
+        self.hp.double_q = double_q
+        self.hp.epsilon_increment = e_greedy_increment
+        self.hp.max_qlearn_steps = max_qlearn_steps
+        self.hp.qlearn_tol = qlearn_tol
+        self.hp.soft_q_type = soft_q_type
+        self.hp.beta = beta
+        #todo:avoid redundancy here currently self.hp. is communicated to the upper level, but what is actually used in the code is self. w/o hp!
+        self.dqn_mode = dqn_mode
         self.table_alpha = table_alpha
         self.n_actions = n_actions
         self.n_features = n_features
@@ -51,8 +73,11 @@ class DeepQNetwork:
         self.max_qlearn_steps = max_qlearn_steps
         self.qlearn_tol = qlearn_tol
         self.epsilon = self.epsilon0 if e_greedy_increment is not None else self.epsilon_max
+        self.soft_q_type = soft_q_type
+        self.beta = beta
 
-        # total learning step
+
+# total learning step
         self.learn_step_counter = 0
 
         # initialize zero memory [s, a, r, s_]
@@ -90,12 +115,22 @@ class DeepQNetwork:
         observation = observation[np.newaxis, :]
 
         actions_value = self.compute_q_eval(observation) #todo - this computation was taken out of if to ensure all states are added
-        if np.random.uniform() < self.epsilon:
-            action = np.argmax(actions_value)
+
+        # self.current_val=np.max(actions_value) #todo debud
+        # self.delta_val=np.max(actions_value)-np.min(actions_value) #todo debud
+
+        if self.soft_q_type == 'boltzmann':
+            boltzmann_measure = np.exp(self.beta * (actions_value-np.max(actions_value))) #todo here substracted max to avoid exponent exploding. need to be taken into a separate function!
+            boltzmann_measure = boltzmann_measure / np.sum(boltzmann_measure, axis=1)
+            ppp=np.abs(np.sum(boltzmann_measure)-1)
+            if ppp>1e-5:
+                print('debug prob:',ppp,'------', actions_value,'-----------',boltzmann_measure)
+            action = np.random.choice(list(range(self.n_actions)),1, p=boltzmann_measure.reshape([-1]))[0]
         else:
-            action = np.random.randint(0, self.n_actions)
-        self.current_val=np.max(actions_value) #todo debud
-        self.delta_val=np.max(actions_value)-np.min(actions_value) #todo debud
+            if np.random.uniform() < self.epsilon:
+                action = np.argmax(actions_value)
+            else:
+                action = np.random.randint(0, self.n_actions)
         return action
 
     def compute_q_eval(self, state, match_th=1e-5):
@@ -142,10 +177,22 @@ class DeepQNetwork:
             q_target = q_eval.copy()
             self.debu1 = q_target.copy()
             # q_target[batch_index, eval_act_index] = reward + self.gamma * np.max(q_next, axis=1)
+
             if self.double_q:
                 q_next_estim=max_by_different_argmax(q_next,q_eval,axis=1)
             else:
                 q_next_estim=np.max(q_next, axis=1)
+
+            if self.soft_q_type=='uniform': #todo combine with the previous if
+                q_next_estim = (1-self.soft_q_factor)*q_next_estim+self.soft_q_factor*np.mean(q_next, axis=1)
+            elif self.soft_q_type=='boltzmann':
+                boltzmann_measure = np.exp(self.beta*(q_next-np.max(q_next,axis=1).reshape([-1,1])))
+                boltzmann_measure = boltzmann_measure/np.sum(boltzmann_measure,axis=1).reshape([-1,1])
+                q_next_estim=np.sum(boltzmann_measure*q_next, axis=1)
+            elif self.soft_q_type is None:
+                pass
+            else:
+                error('unsupoorted type of soft q')
             q_target[batch_index, eval_act_index] = (1-self.table_alpha)*q_target[batch_index, eval_act_index] + self.table_alpha*(reward + self.gamma * q_next_estim)
             self.debu2 = q_target.copy()
             stopflag = False
