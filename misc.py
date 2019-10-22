@@ -4,7 +4,6 @@ import pickle
 import glob
 from scipy import misc
 from mnist import MNIST
-import imageio
 import cv2
 
 
@@ -126,7 +125,7 @@ def read_images_from_path(path = None, filenames = None, max_image=1e7):
     images=[]
     for cnt, image_path in enumerate(filenames):
         if cnt<max_image:
-            images.append( imageio.imread(image_path))
+            images.append(1.0* misc.imread(image_path))
         else:
             break
     return images
@@ -136,7 +135,7 @@ def relu_up_and_down(x,downsample_fun = lambda x: x):
     up_down_views = [np.maximum(x,0), -np.minimum(x,0)]
     return np.concatenate([downsample_fun(uu).reshape([-1]) for uu in up_down_views])
 
-def some_resized_mnist(size=(256,256), n=100,path='../datasets/mnist/'):
+def some_resized_mnist(size=(256,256), n=100,path='/home/bnapp/datasets/mnist/'):
     mnist = MNIST(path)
     images, labels = mnist.load_training()
     some_mnist =[ cv2.resize(1.+np.reshape(uu,[28,28]), dsize=size) for uu in images[:n]]

@@ -80,12 +80,13 @@ class Agent():
     def __init__(self,max_q = None):
         self.hp = HP()
         # self.hp.action_space =[-1,1]# [-3,-2,-1,0,1,2,3]
-        # self.hp.action_space = ['v_right','v_left','v_up','v_down','null'] #'
+        # self.hp.action_space = ['v_right','v_left','v_up','v_down','null'] #'            #,'R','L','U','D'] +
         self.hp.action_space = ['v_right','v_left','v_up','v_down','null'] + \
-                               [['v_right','v_up'],['v_right','v_down'],['v_left','v_up'],['v_left','v_down']]#'
-        self.hp.returning_force = 0.001 #0.00001
+                              [['v_right','v_up'],['v_right','v_down'],['v_left','v_up'],['v_left','v_down']]#'
+        self.hp.big_move = 25
         self.max_q = max_q
         self.q_centre = np.array(self.max_q, dtype='f') / 2
+        self.saccade_flag = False
         self.reset()
 
     def reset(self):
@@ -100,6 +101,9 @@ class Agent():
             action = 'null'
         else:
             action = self.hp.action_space[a]
+
+        self.saccade_flag = False
+
         #delta_a = 0.001
         if type(action) == list:
             for subaction in action:
@@ -111,16 +115,50 @@ class Agent():
         self.qdot += self.qdotdot
         #self.qdot -= self.hp.returning_force*(self.q_ana-self.q_centre)
         self.q_ana +=self.qdot
+        self.enforce_boundaries()
+
+    def enforce_boundaries(self):
         self.q_ana = np.minimum(self.q_ana,self.max_q)
-        self.q_ana = np.maximum(self.q_ana,[0.0,0.0])
+        self.q_ana = np.maximum(self.q_ana,[0.0, 0.0])
         self.q = np.int32(np.floor(self.q_ana))
 
     def parse_action(self,action):
-        if type(action)==int:
+        if type(action)==int: #todo  - int actions denote velocity shift of velocity in x direction. this needs to be generalized
             self.qdot[0] = action
             self.qdotdot = np.array([0., 0.])
-        elif action == 'v_up':   # up
-            self.qdot[1] = self.qdot[1] + 1 if self.q[1] < self.max_q[1]-1 else -0
+        elif action == 'reset':
+            self.reset()
+            self.saccade_flag = True
+        elif action == 'R':
+            self.q_ana[0] += self.hp.big_move
+            self.qdot = np.array([0.0, 0.0])
+            self.qdotdot = np.array([0.0, 0.0])
+            self.saccade_flag = True
+            self.enforce_boundaries()
+
+        elif action == 'L':
+            self.q_ana[0] -= self.hp.big_move
+            self.qdot = np.array([0.0, 0.0])
+            self.qdotdot = np.array([0.0, 0.0])
+            self.saccade_flag = True
+            self.enforce_boundaries()
+
+        elif action == 'U':
+            self.q_ana[1] += self.hp.big_move
+            self.qdot = np.array([0.0, 0.0])
+            self.qdotdot = np.array([0.0, 0.0])
+            self.saccade_flag = True
+            self.enforce_boundaries()
+
+        elif action == 'D':
+            self.q_ana[1] -= self.hp.big_move
+            self.qdot = np.array([0.0, 0.0])
+            self.qdotdot = np.array([0.0, 0.0])
+            self.saccade_flag = True
+            self.enforce_boundaries()
+
+        elif action == 'v_up':  # up
+            self.qdot[1] = self.qdot[1] + 1 if self.q[1] < self.max_q[1] - 1 else -0
             self.qdotdot = np.array([0., 0.])
         elif action == 'v_down':   # down
             self.qdot[1] = self.qdot[1] - 1 if self.q[1] > 0 else -0
@@ -175,6 +213,8 @@ class Rewards():
                 this_reward = self.Speed_reward()
             elif reward_type == 'boundaries':
                 this_reward = self.Boundary_reward()
+            elif reward_type == 'saccade':
+                this_reward = self.Saccade_reward()
             else:
                 error('unknown reward')
             self.reward_obj_list.append(this_reward)
@@ -252,6 +292,13 @@ class Rewards():
 
         def update(self, sensor = None, agent = None):
             self.reward = self.hp.alpha_decay*np.sqrt(np.mean(agent.qdot**2)) + (1-self.hp.alpha_decay)*self.reward
+
+    class Saccade_reward():
+        def __init__(self):
+            self.hp = HP()
+
+        def update(self, sensor = None, agent = None):
+            self.reward = 1.0*agent.saccade_flag
 
     class Boundary_reward():
         def __init__(self):

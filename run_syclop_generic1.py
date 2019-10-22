@@ -12,7 +12,7 @@ import cv2
 hp=HP()
 hp.save_path = 'saved_runs'
 hp.this_run_name = sys.argv[0] + '_noname_' + str(int(time.time()))
-hp.description = "resized mnist, first 300 images, penalty for speed"
+hp.description = "only 2nd image from videos 1st frame, penalty for speed, soft q learning"
 hp.mem_depth = 1
 hp.max_episode =  10000
 hp.steps_per_episode = 100
@@ -28,10 +28,19 @@ hp.logmode = False
 if not os.path.exists(hp.save_path):
     os.makedirs(hp.save_path)
 
-hp.this_run_path = hp.save_path+'/'+hp.this_run_name+'/'
-if not os.path.exists(hp.this_run_path):
-    os.makedirs(hp.this_run_path)
-else:
+# if not os.path.exists(hp.this_run_path):
+#     os.makedirs(hp.this_run_path)
+# else:
+#     error('run name already exists!')
+dir_success=False
+for sfx in range(1000):
+    candidate_path = hp.save_path + '/' + hp.this_run_name + '_' + str(sfx) + '/'
+    if not os.path.exists(candidate_path):
+        hp.this_run_path = candidate_path
+        os.makedirs(hp.this_run_path)
+        dir_success=True
+        break
+if not dir_success:
     error('run name already exists!')
 
 def local_observer(sensor,agent):
@@ -97,7 +106,9 @@ if __name__ == "__main__":
     recorder = Recorder(n=6)
 
     # images = read_images_from_path('/home/bnapp/arivkindNet/video_datasets/stills_from_videos/some100img_from20bn/*')
-    images = some_resized_mnist(n=400)
+    # images = some_resized_mnist(n=400)
+    images = read_images_from_path('/home/bnapp/arivkindNet/video_datasets/stills_from_videos/some100img_from20bn/*',max_image=10)
+    # images = [images[1]]
     # images = [np.sum(1.0*uu, axis=2) for uu in images]
     # images = [cv2.resize(uu, dsize=(256, 256-64), interpolation=cv2.INTER_AREA) for uu in images]
     if hp.logmode:
@@ -111,7 +122,7 @@ if __name__ == "__main__":
     sensor = syc.Sensor( log_mode=False, log_floor = 1.0)
     agent = syc.Agent(max_q = [scene.maxx-sensor.hp.winx,scene.maxy-sensor.hp.winy])
 
-    reward = syc.Rewards(reward_types=['central_rms_intensity', 'speed'],relative_weights=[1.0,-float(sys.argv[1])])
+    reward = syc.Rewards(reward_types=['central_rms_intensity', 'speed','saccade'],relative_weights=[1.0,-float(sys.argv[1]),-200])
     # observation_size = sensor.hp.winx*sensor.hp.winy*2
     observation_size = 256*4
     RL = DeepQNetwork(len(agent.hp.action_space), observation_size*hp.mem_depth,#sensor.frame_size+2,
@@ -126,7 +137,7 @@ if __name__ == "__main__":
                       dqn_mode=True,
                       state_table=np.zeros([1,observation_size*hp.mem_depth]),
                       soft_q_type='boltzmann',
-                      beta=0.1
+                      beta=1.0
                       )
     # RL.dqn.load_nwk_param('tempX_1.nwk')
     # RL.dqn.save_nwk_param('liron_encircle.nwk')
