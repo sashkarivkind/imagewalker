@@ -81,6 +81,8 @@ class Agent():
         self.hp = HP()
         # self.hp.action_space =[-1,1]# [-3,-2,-1,0,1,2,3]
         # self.hp.action_space = ['v_right','v_left','v_up','v_down','null'] #'            #,'R','L','U','D'] +
+        # self.hp.action_space = ['v_right','v_left','v_up','v_down','null','R','L','U','D'] + \
+        #                       [['v_right','v_up'],['v_right','v_down'],['v_left','v_up'],['v_left','v_down']]#'
         self.hp.action_space = ['v_right','v_left','v_up','v_down','null'] + \
                               [['v_right','v_up'],['v_right','v_down'],['v_left','v_up'],['v_left','v_down']]#'
         self.hp.big_move = 25

@@ -138,5 +138,60 @@ def relu_up_and_down(x,downsample_fun = lambda x: x):
 def some_resized_mnist(size=(256,256), n=100,path='/home/bnapp/datasets/mnist/'):
     mnist = MNIST(path)
     images, labels = mnist.load_training()
-    some_mnist =[ cv2.resize(1.+np.reshape(uu,[28,28]), dsize=size) for uu in images[:n]]
+    some_mnist =[ cv2.resize(0.0+np.reshape(uu,[28,28]), dsize=size) for uu in images[:n]]
     return some_mnist
+
+def pack_scene(images,xys,xx=256,yy=256,y_size=28,x_size=28):
+    #todo: double-check x-y vs. row-column convention
+    scene=np.zeros([yy,xx])
+    for image,xy in zip(images,xys):
+        x0,y0=xy
+        scene[y0:y0+y_size,x0:x0+x_size]=np.reshape(image,[y_size,x_size])
+    # some_mnistSM =[ cv2.resize(1.+np.reshape(uu,[28,28]), dsize=(256, 256)) for uu in images[:20]]
+    return scene
+
+def build_mnist_scene(image_db,images_per_scene=3,xx=256,yy=256,y_size=28,x_size=28):
+    #creates a canvas randomly filled by mnist digits
+    #todo: double-check x-y vs. row-column convention
+    images = [image_db[np.random.randint(len(image_db))] for uu in range(images_per_scene)]
+    xys = [(np.random.randint(xx-x_size),np.random.randint(yy-y_size)) for uu in range(images_per_scene)]
+    return pack_scene(images,xys,xx=xx,yy=yy,y_size=y_size,x_size=y_size)
+
+def build_mnist_padded(image,xx=128,yy=128,y_size=28,x_size=28,offset=(0,0)):
+    #todo: double-check x-y vs. row-column convention
+    #prepares an mnist image padded with zeros everywhere around it, written in a somewhat strange way to resuse other availiable functions
+    xys = [((xx-x_size)//2+offset[0],(yy-y_size)//2+offset[1])]
+    return pack_scene(image,xys,xx=xx,yy=yy,y_size=y_size,x_size=y_size)
+
+def prep_mnist_sparse_images(max_image,images_per_scene=5,path='/home/bnapp/datasets/mnist/'):
+    #todo: ensure not taking the same image over and over again
+    mnist = MNIST(path)
+    images, labels = mnist.load_training()
+    return [build_mnist_scene(images,images_per_scene=images_per_scene) for uu in range(max_image)]
+
+def prep_mnist_padded_images(max_image,size=None,path='/home/bnapp/datasets/mnist/'):
+    if size is None: #kept separate from sale 1.0 toensure backward compatibility
+        mnist = MNIST(path)
+        images, labels = mnist.load_training()
+        return [build_mnist_padded([image]) for image in images[:max_image]]
+    else:
+        images=some_resized_mnist(size=size, n=max_image)
+        return [build_mnist_padded([image],y_size=size[1],x_size=size[0]) for image in images[:max_image]]
+
+def prep_n_grams(x,n=None,offsets=None):
+    if (n is None) and  not (offsets is None):
+        pass
+    elif not(n is None) and (offsets is None):
+        offsets = list(range(n))
+    else:
+        error('need to provide either n or offsets')
+    ngram_dict = {}
+    for ii in range(len(x)-offsets[-1]):
+        this_ngram = tuple(x[ii+oo] for oo in offsets)
+        if this_ngram in ngram_dict.keys():
+            ngram_dict[this_ngram] +=1
+        else:
+            ngram_dict[this_ngram] = 1
+    return ngram_dict
+
+

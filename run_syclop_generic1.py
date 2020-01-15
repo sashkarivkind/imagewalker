@@ -12,9 +12,10 @@ import cv2
 hp=HP()
 hp.save_path = 'saved_runs'
 hp.this_run_name = sys.argv[0] + '_noname_' + str(int(time.time()))
-hp.description = "only 2nd image from videos 1st frame, penalty for speed, soft q learning"
+# hp.description = "only 2nd image from videos 1st frame, penalty for speed, soft q learning"
+hp.description = "padded mnist corrected"
 hp.mem_depth = 1
-hp.max_episode =  10000
+hp.max_episode = 10000
 hp.steps_per_episode = 100
 hp.steps_between_learnings = 100
 hp.fading_mem = 0.5
@@ -22,8 +23,7 @@ recorder_file = 'records.pkl'
 hp_file = 'hp.pkl'
 hp.contrast_range = [1.0,1.1]
 hp.logmode = False
-
-
+hp.initial_network = None # 'saved_runs/run_syclop_generic1.py_noname_1576060868_0/nwk2.nwk'
 
 if not os.path.exists(hp.save_path):
     os.makedirs(hp.save_path)
@@ -104,10 +104,16 @@ def run_env():
 if __name__ == "__main__":
 
     recorder = Recorder(n=6)
+    # #load Liron's dataset
+    # images = read_images_from_path('../video_datasets/liron_images/*.jpg')
+    # images = [np.sum(1.0*uu, axis=2) for uu in images]
+    # images = [cv2.resize(uu, dsize=(256, 256-64), interpolation=cv2.INTER_AREA) for uu in images]
 
     # images = read_images_from_path('/home/bnapp/arivkindNet/video_datasets/stills_from_videos/some100img_from20bn/*')
     # images = some_resized_mnist(n=400)
-    images = read_images_from_path('/home/bnapp/arivkindNet/video_datasets/stills_from_videos/some100img_from20bn/*',max_image=10)
+    # images = prep_mnist_sparse_images(400,images_per_scene=20)
+    images = prep_mnist_padded_images(400)
+    # images = read_images_from_path('/home/bnapp/arivkindNet/video_datasets/stills_from_videos/some100img_from20bn/*',max_image=10)
     # images = [images[1]]
     # images = [np.sum(1.0*uu, axis=2) for uu in images]
     # images = [cv2.resize(uu, dsize=(256, 256-64), interpolation=cv2.INTER_AREA) for uu in images]
@@ -137,10 +143,11 @@ if __name__ == "__main__":
                       dqn_mode=True,
                       state_table=np.zeros([1,observation_size*hp.mem_depth]),
                       soft_q_type='boltzmann',
-                      beta=1.0
-                      )
-    # RL.dqn.load_nwk_param('tempX_1.nwk')
-    # RL.dqn.save_nwk_param('liron_encircle.nwk')
+                      beta=0.1,
+                      arch='mlp')
+
+    if not(hp.initial_network is None):
+        RL.dqn.load_nwk_param(hp.initial_network)
     hp.scene = scene.hp
     hp.sensor = sensor.hp
     hp.agent = agent.hp

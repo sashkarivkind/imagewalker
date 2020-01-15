@@ -18,6 +18,8 @@ class DeepQNetwork:
             self,
             n_actions,
             n_features,
+            n_features_shaped=None,
+            shape_fun = lambda x: x,
             learning_rate=0.00025,
             reward_decay=0.9,
             e_greedy=0.9,
@@ -34,7 +36,8 @@ class DeepQNetwork:
             table_alpha = 1.0,
             dqn_mode=True,
             soft_q_type=None, #'boltzmann'
-            beta=1
+            beta=1,
+            arch='mlp'
             ):
 
         self.hp = HP()
@@ -43,6 +46,9 @@ class DeepQNetwork:
         self.hp.table_alpha = table_alpha
         self.hp.n_actions = n_actions
         self.hp.n_features = n_features
+        self.hp.n_features = n_features
+        self.hp.n_features_shaped = n_features if n_features_shaped is None else n_features_shaped
+        # self.hp.shape_fun=shape_fun
         self.hp.lr = learning_rate
         self.hp.gamma = reward_decay
         self.hp.epsilon_max = e_greedy
@@ -56,11 +62,14 @@ class DeepQNetwork:
         self.hp.qlearn_tol = qlearn_tol
         self.hp.soft_q_type = soft_q_type
         self.hp.beta = beta
+        self.hp.arch = arch
         #todo:avoid redundancy here currently self.hp. is communicated to the upper level, but what is actually used in the code is self. w/o hp!
         self.dqn_mode = dqn_mode
         self.table_alpha = table_alpha
         self.n_actions = n_actions
         self.n_features = n_features
+        self.n_features_shaped = n_features if n_features_shaped is None else n_features_shaped
+        self.shape_fun=shape_fun
         self.lr = learning_rate
         self.gamma = reward_decay
         self.epsilon_max = e_greedy
@@ -89,14 +98,14 @@ class DeepQNetwork:
             self.q_eval = np.zeros((np.shape(state_table)[0],n_actions))
         else:
             self.cost_his = []
-            self.dqn = rlnet.DQN_net(n_features, n_actions, learning_rate=self.lr)
+            self.dqn = rlnet.DQN_net(self.hp.n_features_shaped, n_actions, learning_rate=self.lr, arch=arch)
             self.dqn.sess = tf.Session()
             self.dqn.sess.run(tf.global_variables_initializer())
             self.dqn.reset()
 
 
     def approx_by_table_entry(self, states):
-        return np.argmin(ssd.cdist(self.state_table,states), axis=0)
+        return np.argmin(ssd.cdist(self.state_table, states), axis=0)
 
     def store_transition(self, s, a, r, s_):
         if not hasattr(self, 'memory_counter'):
@@ -107,14 +116,12 @@ class DeepQNetwork:
         # replace the old memory with new memory
         index = self.memory_counter % self.memory_size
         self.memory[index, :] = transition
-
         self.memory_counter += 1
 
     def choose_action(self, observation):
         # to have batch dimension when feed into tf placeholder
         observation = observation[np.newaxis, :]
-
-        actions_value = self.compute_q_eval(observation) #todo - this computation was taken out of if to ensure all states are added
+        actions_value = self.compute_q_eval(self.shape_fun(observation)) #todo - this computation was taken out of if to ensure all states are added
 
         # self.current_val=np.max(actions_value) #todo debud
         # self.delta_val=np.max(actions_value)-np.min(actions_value) #todo debud
@@ -122,9 +129,11 @@ class DeepQNetwork:
         if self.soft_q_type == 'boltzmann':
             boltzmann_measure = np.exp(self.beta * (actions_value-np.max(actions_value))) #todo here substracted max to avoid exponent exploding. need to be taken into a separate function!
             boltzmann_measure = boltzmann_measure / np.sum(boltzmann_measure, axis=1)
+            #todo this is a sanity check, to be removed at some point
             ppp=np.abs(np.sum(boltzmann_measure)-1)
             if ppp>1e-5:
                 print('debug prob:',ppp,'------', actions_value,'-----------',boltzmann_measure)
+            #end of todo
             action = np.random.choice(list(range(self.n_actions)),1, p=boltzmann_measure.reshape([-1]))[0]
         else:
             if np.random.uniform() < self.epsilon:
@@ -135,9 +144,9 @@ class DeepQNetwork:
 
     def compute_q_eval(self, state, match_th=1e-5):
         if self.dqn_mode:
-            return self.dqn.eval(state)
+            return self.dqn.eval_eval(state)
         else:
-            dd=(np.sum((self.state_table - state)**2,axis=1)) #todo - generalize beyond eucledian distance
+            dd=(np.sum((self.state_table - state)**2, axis=1)) #todo - generalize beyond eucledian distance
             if np.min(dd) < match_th:
                 ii = np.argmin(dd)
             else:
@@ -148,7 +157,7 @@ class DeepQNetwork:
             return self.q_eval[ii,:]
 
     def map_actions(self, observation): #todo rewrite in matrix form
-        actions_values = self.dqn.eval(observation)
+        actions_values = self.dqn.eval_eval(observation)
         return actions_values
 
     def learn(self):
@@ -170,8 +179,8 @@ class DeepQNetwork:
         reward = batch_memory[:, self.n_features + 1]
 
         if self.dqn_mode:
-            q_next, q_eval = [self.dqn.eval_next(batch_memory[:, -self.n_features:]),
-                             self.dqn.eval( batch_memory[:, :self.n_features])]
+            q_next, q_eval = [self.dqn.eval_next(self.shape_fun(batch_memory[:, -self.n_features:])),
+                              self.dqn.eval_eval(self.shape_fun(batch_memory[:, :self.n_features]))]
 
             # change q_target w.r.t q_eval's action
             q_target = q_eval.copy()
@@ -197,20 +206,17 @@ class DeepQNetwork:
             self.debu2 = q_target.copy()
             stopflag = False
             qlearn_step = 0
-            # train eval network
-            #print('feed dict', np.concatenate([batch_memory[:, :self.n_features], q_target],axis=1))
+
             while not stopflag:
-                # print(batch_memory[:, :self.n_features])
-                # print('---------------------qqq:')
-                _, self.cost = self.dqn.training_step(batch_memory[:, :self.n_features],q_target)
+                _, self.cost = self.dqn.training_step(self.shape_fun(batch_memory[:, :self.n_features]),q_target)
 
                 qlearn_step +=1
                 stopflag  = self.cost < self.qlearn_tol or qlearn_step > self.max_qlearn_steps
                 #print('cost', self.cost)
             self.cost_his.append(self.cost)
         else:
-            batch_table_index = self.approx_by_table_entry(batch_memory[:, :self.n_features])  # np.argmin(np.sqrt((self.state_table -batch_memory[:, :self.n_features] )**2))- #todo generalize the distance
-            batch_table_index_ = self.approx_by_table_entry(batch_memory[:, -self.n_features:])  # np.argmin(np.sqrt((self.state_table -batch_memory[:, :self.n_features] )**2))- #todo generalize the distance
+            batch_table_index = self.approx_by_table_entry(batch_memory[:, :self.n_features])   #todo generalize the distance
+            batch_table_index_ = self.approx_by_table_entry(batch_memory[:, -self.n_features:])  #todo generalize the distance
             self.q_eval[batch_table_index, eval_act_index] = (1-self.table_alpha)*self.q_eval[batch_table_index, eval_act_index] + \
                 self.table_alpha*(reward + self.gamma * np.max(self.q_eval[batch_table_index_, :], axis=1))
 
