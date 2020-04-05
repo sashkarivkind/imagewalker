@@ -170,7 +170,7 @@ def prep_mnist_sparse_images(max_image,images_per_scene=5,path='/home/bnapp/data
     return [build_mnist_scene(images,images_per_scene=images_per_scene) for uu in range(max_image)]
 
 def prep_mnist_padded_images(max_image,size=None,path='/home/bnapp/datasets/mnist/'):
-    if size is None: #kept separate from sale 1.0 toensure backward compatibility
+    if size is None: #kept separate from sale 1.0 to ensure backward compatibility
         mnist = MNIST(path)
         images, labels = mnist.load_training()
         return [build_mnist_padded([image]) for image in images[:max_image]]

@@ -13,7 +13,7 @@ hp=HP()
 hp.save_path = 'saved_runs'
 hp.this_run_name = sys.argv[0] + '_noname_' + str(int(time.time()))
 # hp.description = "only 2nd image from videos 1st frame, penalty for speed, soft q learning"
-hp.description = "cnn on mnist"
+hp.description = "cnn on mnist, 50% inversed, 5000 images"
 hp.mem_depth = 1
 hp.max_episode = 10000
 hp.steps_per_episode = 100
@@ -105,7 +105,11 @@ if __name__ == "__main__":
     recorder = Recorder(n=6)
 
     # images = read_images_from_path('/home/bnapp/arivkindNet/video_datasets/stills_from_videos/some100img_from20bn/*')
-    images = some_resized_mnist(n=400)
+    # images = some_resized_mnist(n=400)
+    images = prep_mnist_padded_images(5000)
+    for ii,image in enumerate(images):
+        if ii%2:
+            images[ii]=-image+np.max(image)
     # images = prep_mnist_sparse_images(400,images_per_scene=20)
     # images = read_images_from_path('/home/bnapp/arivkindNet/video_datasets/stills_from_videos/some100img_from20bn/*',max_image=10)
     # images = [images[1]]

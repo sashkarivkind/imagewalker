@@ -209,7 +209,7 @@ class DeepQNetwork:
 
             while not stopflag:
                 _, self.cost = self.dqn.training_step(self.shape_fun(batch_memory[:, :self.n_features]),q_target)
-
+                # print('cost:',self.cost)
                 qlearn_step +=1
                 stopflag  = self.cost < self.qlearn_tol or qlearn_step > self.max_qlearn_steps
                 #print('cost', self.cost)

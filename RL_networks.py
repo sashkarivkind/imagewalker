@@ -54,18 +54,21 @@ class DQN_net():
                 self.q_next.theta_update(theta_list[1])
 
 class Network():
-    def __init__(self, n_features, n_actions, lr=None, trainable = False, arch='mlp', layer_size=None):
+    def __init__(self, n_features, n_actions, lr=None, trainable = False, arch='mlp', layer_size=None, optimizer='Adam'):
         print('debug n_features:',n_features)
         self.hp = HP()
         #self.default_nl=tf.nn.relu
         self.hp.lr = lr
+        self.hp.scale_layer_en = False
+        self.hp.optimizer=optimizer
         self.next_layer_id = 0
         self.layers = {}
         self.n_features = n_features
         self.n_actions = n_actions
         self.theta = {}
         self.hp.arch = arch
-        default_layer_size={'mlp':  [None]+[400]+[200]*3+[ None],
+
+        default_layer_size={'mlp':  [None]+[400]*1+[200]*1+[10,10]*0+[ None],
                             'conv': [None]+[[3,3,32]]+[[2,2,16]]+[200]+[ None]}
 
         layer_size = default_layer_size[arch] if layer_size is None else layer_size
@@ -78,14 +81,21 @@ class Network():
             error
         self.hp.layer_size =layer_size
 
+        if self.hp.optimizer == 'GradientDescent':
+            optimizer_fun =  tf.train.GradientDescentOptimizer
+        elif self.hp.optimizer == 'RMSprom':
+            optimizer_fun = tf.train.RMSPropOptimizer
+        elif self.hp.optimizer == 'Adam':
+            optimizer_fun = tf.train.AdamOptimizer
+        else:
+            error
+
         self.q_target = tf.placeholder(tf.float32, [None, n_actions])
         if trainable:
             self.loss = tf.reduce_mean(tf.squared_difference(self.q_target, self.estimator))
             # self.loss = tf.reduce_mean(tf.losses.absolute_difference(self.q_target, self.estimator))
             # tf.losses.absolute_difference()
-            # self.train_op = tf.train.GradientDescentOptimizer(self.hp.lr).minimize(self.loss)
-            # self.train_op = tf.train.RMSPropOptimizer(self.hp.lr).minimize(self.loss)
-            self.train_op = tf.train.AdamOptimizer(self.hp.lr).minimize(self.loss)
+            self.train_op = optimizer_fun(self.hp.lr).minimize(self.loss)
         self.sess = None
 
     def get_layer_id(self):
@@ -103,6 +113,8 @@ class Network():
             # next_l = tf.nn.dropout(next_l, 0.95)
         ll_size=layer_size[-1]
         next_l = self.dense_ff_layer(next_l, ll_size, nl= lambda x: x, g=1e-10)
+        if self.hp.scale_layer_en:
+            next_l = self.scaling_layer(next_l)
         return next_l
 
     def conv_network(self, layer_size = [None]+[[3,3,32]]+[[2,2,16]]+[200]+[ None]):
@@ -120,7 +132,7 @@ class Network():
         next_l = self.dense_ff_layer(next_l, ll_size, nl= lambda x: x, g=1e-10)
         return next_l
 
-    def dense_ff_layer(self, previous_layer, output_size, nl=tf.nn.tanh, theta = None,g=1.0):
+    def dense_ff_layer(self, previous_layer, output_size, nl=tf.nn.sigmoid, theta = None,g=1.0): #todo organize support for multiple nonlinearities
         if theta is None:
             this_theta = {}
             # print('debug:',np.float(np.shape(previous_layer)[-1])**0.5)
@@ -138,6 +150,18 @@ class Network():
         layer_id=self.get_layer_id()
         self.theta[layer_id] = this_theta
         self.layers[layer_id] = nl(tf.matmul(previous_layer, this_theta['w']) + this_theta['b'])
+        return self.layers[layer_id]
+
+    def scaling_layer(self, previous_layer, theta = None):
+        if theta is None:
+            this_theta = {}
+            print('debug:',np.shape(previous_layer))
+            this_theta['scale'] = tf.Variable(1.0)
+        else:
+            error('explicit theta is still unsupported')
+        layer_id=self.get_layer_id()
+        self.theta[layer_id] = this_theta
+        self.layers[layer_id] = previous_layer * this_theta['scale']
         return self.layers[layer_id]
 
     def conv2d_layer(self, previous_layer, filters_hwc, nl=tf.nn.relu, theta=None, g=1.0):
