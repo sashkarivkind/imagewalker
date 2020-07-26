@@ -23,7 +23,7 @@ recorder_file = 'records.pkl'
 hp_file = 'hp.pkl'
 hp.contrast_range = [1.0,1.1]
 hp.logmode = False
-
+hp.dqn_initial_network = 'saved_runs/run_syclop_generic_cnn1.py_noname_1588239131_0/tempX_1.nwk'
 
 if not os.path.exists(hp.save_path):
     os.makedirs(hp.save_path)
@@ -148,6 +148,8 @@ if __name__ == "__main__":
                       )
     # RL.dqn.load_nwk_param('tempX_1.nwk')
     # RL.dqn.save_nwk_param('liron_encircle.nwk')
+    if not(hp.dqn_initial_network is None):
+        RL.dqn.load_nwk_param(hp.dqn_initial_network)
     hp.scene = scene.hp
     hp.sensor = sensor.hp
     hp.agent = agent.hp

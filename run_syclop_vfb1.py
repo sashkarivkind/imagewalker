@@ -112,12 +112,12 @@ if __name__ == "__main__":
 
     # images = read_images_from_path('/home/bnapp/arivkindNet/video_datasets/stills_from_videos/some100img_from20bn/*')
     # images = some_resized_mnist(n=400)
-    # images = prep_mnist_sparse_images(400,images_per_scene=20)
-    images = prep_mnist_padded_images(5000)
-    for ii,image in enumerate(images):
-        if ii%2:
-            images[ii]=-image+np.max(image)
-    # images = read_images_from_path('/home/bnapp/arivkindNet/video_datasets/stills_from_videos/some100img_from20bn/*',max_image=40)
+    # # images = prep_mnist_sparse_images(400,images_per_scene=20)
+    # images = prep_mnist_padded_images(5000)
+    # for ii,image in enumerate(images):
+    #     if ii%2:
+    #         images[ii]=-image+np.max(image)
+    images = read_images_from_path('/home/bnapp/arivkindNet/video_datasets/stills_from_videos/some100img_from20bn/*',max_image=40)
     # images = [images[1]]
     # images = [np.sum(1.0*uu, axis=2) for uu in images]
     # images = [cv2.resize(uu, dsize=(256, 256-64), interpolation=cv2.INTER_AREA) for uu in images]

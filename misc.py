@@ -5,6 +5,7 @@ import glob
 from scipy import misc
 from mnist import MNIST
 import cv2
+import sys
 
 
 class HP:
@@ -70,6 +71,10 @@ class Recorder:
             self.n = len(self.records)
 
 
+def one_hot(a,depth):
+    o=np.zeros([len(a),depth])
+    o[list(range(len(a))),a]=1
+    return o
 
 def magnify_image(img,factor):
     return np.kron(img,np.ones([factor,factor]))

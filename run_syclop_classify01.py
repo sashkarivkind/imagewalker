@@ -1,5 +1,5 @@
                                                                                                                                                                                                                                                                                                                                         #from image_env_mnist1 import Image_env1
-from RL_brain_b import DeepQNetwork
+from RL_brain_neu import DeepQNetwork
 import numpy as np
 import time
 import pickle
@@ -9,22 +9,30 @@ from misc import *
 import sys
 import os
 import cv2
+from mnist import MNIST
+
 hp=HP()
 hp.save_path = 'saved_runs'
 hp.this_run_name = sys.argv[0] + '_noname_' + str(int(time.time()))
 # hp.description = "only 2nd image from videos 1st frame, penalty for speed, soft q learning"
-hp.description = "hello neu, L1 penalty on the 2nd layer out of 4,small initial weights" #, 10x slower learning, x10 longer run "
+hp.description = "ignore hyper params! debug! "
 # hp.description = "video dataset, 40 stills, VFB!!!!, 2 layer,  Normalized Speed (hard coded)" #, 10x slower learning, x10 longer run "
 hp.mem_depth = 1
-hp.max_episode = 10000
+hp.max_episode = 100000
 hp.steps_per_episode = 100
-hp.steps_between_learnings = 100
+hp.steps_between_dnn_learnings = 10
+hp.steps_between_dqn_learnings = 10000e10
 hp.fading_mem = 0.5 ### fading memory migrated directly into the DVS view
 recorder_file = 'records.pkl'
 hp_file = 'hp.pkl'
 hp.contrast_range = [1.0,1.1]
 hp.logmode = False
-hp.initial_network = None #'saved_runs/run_syclop_vfb1_neu.py_noname_1586162888_0/tempX_1.nwk'
+# hp.dqn_initial_network =  'saved_runs/run_syclop_vfb1.py_noname_1587565310_0//tempX_1.nwk' #'saved_runs/run_syclop_classify01.py_noname_1587509590_0/tempX_1.nwk'
+# hp.dnn_initial_network =  None #'saved_runs/run_syclop_classify01.py_noname_1587509590_0/tempX_1dnn.nwk'
+
+runname_='saved_runs/run_syclop_vfb1.py_noname_1587846759_0/'
+hp.dqn_initial_network =  runname_+'/tempX_1.nwk'
+hp.dnn_initial_network = None #runname_+'/tempX_1dnn.nwk'
 
 if not os.path.exists(hp.save_path):
     os.makedirs(hp.save_path)
@@ -44,6 +52,8 @@ for sfx in range(1000):
 if not dir_success:
     error('run name already exists!')
 
+
+
 def local_observer(sensor,agent):
     normfactor=1.0/256.0
     return normfactor*np.concatenate([relu_up_and_down(sensor.central_dvs_view),
@@ -52,14 +62,14 @@ def run_env():
     old_policy_map=0
     step = 0
     best_thus_far = -1e10
-    running_ave_reward = 0
+    running_ave_reward =np.array([0])
 
     for episode in range(hp.max_episode):
         observation = np.random.uniform(0,1,size=[hp.mem_depth, observation_size])
         observation_ = np.random.uniform(0,1,size=[hp.mem_depth, observation_size])
         scene.current_frame = np.random.choice(scene.total_frames)
         scene.image = scene.frame_list[scene.current_frame]
-
+        this_label = labels[scene.current_frame]
         agent.reset()
         # agent.q_ana[1]=256./2.-32
         # agent.q_ana[0]=192./2-32
@@ -71,8 +81,12 @@ def run_env():
         for step_prime in range(hp.steps_per_episode):
             action = RL.choose_action(observation.reshape([-1]))
             net = RL.dqn.eval_incl_layers(observation.reshape([1, -1]))
-            reward.update_rewards(sensor = sensor, agent = agent, network=net[2])
-            running_ave_reward = 0.999*running_ave_reward+0.001*np.array([reward.reward]+reward.rewards.tolist())
+            label_=RL.dnn.eval_eval(observation.reshape([1, -1]))
+            local_reward = np.argmax(label_)==np.argmax(this_label) #todo
+            #reward.update_rewards(sensor = sensor, agent = agent, network=net[2])
+            # running_ave_reward = 0.999*running_ave_reward+0.001*np.array([reward.reward]+reward.rewards.tolist())
+            reward.reward=local_reward #todo
+            running_ave_reward = 0.999*running_ave_reward+0.001*local_reward#np.array([reward.reward]+reward.rewards.tolist())
             if step % 10000 < 1000:
                 # print([agent.q_ana[0], agent.q_ana[1], reward.reward] , reward.rewards , [RL.epsilon])
                 # print(type([agent.q_ana[0], agent.q_ana[1], reward.reward]) , type(reward.rewards), type([RL.epsilon]))
@@ -82,21 +96,28 @@ def run_env():
             # scene.update()
             observation_ *= hp.fading_mem
             observation_ += local_observer(sensor, agent)  # todo: generalize
-            RL.store_transition(observation.reshape([-1]), action, reward.reward, observation_.reshape([-1]))
+            # print('debu',local_reward)
+            # print('debu',reward.reward)
+            # print('debu',label_, 'and', this_label)
+            RL.store_transition(observation.reshape([-1]), action, reward.reward, observation_.reshape([-1]),this_label)
             observation = copy.copy(observation_)
             step += 1
-            if (step > 100) and (step % hp.steps_between_learnings == 0):
-                RL.learn()
+            if (step > 100) and (step % hp.steps_between_dnn_learnings == 0):
+                RL.learn(learn_dqn=False)
+            if (step > 100) and (step % hp.steps_between_dqn_learnings == 0):
+                RL.learn(learn_dnn=False)
             if step%1000 ==0:
                 print(episode,step,' running reward   ',running_ave_reward)
                 print('frame:', scene.current_frame,)
                 if running_ave_reward[0] > best_thus_far:
                     best_thus_far = running_ave_reward[0]
                     RL.dqn.save_nwk_param(hp.this_run_path+'best_liron.nwk')
+                    RL.dnn.save_nwk_param(hp.this_run_path+'best_lirondnn.nwk')
                     print('saved best network, mean reward: ', best_thus_far)
             if step%10000 ==0:
                     recorder.plot()
                     RL.dqn.save_nwk_param(hp.this_run_path+'tempX_1.nwk')
+                    RL.dnn.save_nwk_param(hp.this_run_path+'tempX_1dnn.nwk')
                     # debug_policy_plot()
             if step % 100000 == 0:
                     recorder.save(hp.this_run_path+recorder_file)
@@ -106,14 +127,10 @@ def run_env():
 if __name__ == "__main__":
 
     recorder = Recorder(n=6)
-    # #load Liron's dataset
-    # images = read_images_from_path('../video_datasets/liron_images/*.jpg')
-    # images = [np.sum(1.0*uu, axis=2) for uu in images]
-    # images = [cv2.resize(uu, dsize=(256, 256-64), interpolation=cv2.INTER_AREA) for uu in images]
-
-    # images = read_images_from_path('/home/bnapp/arivkindNet/video_datasets/stills_from_videos/some100img_from20bn/*')
-    # images = some_resized_mnist(n=400)
-    # images = prep_mnist_sparse_images(400,images_per_scene=20)
+    path = '/home/bnapp/datasets/mnist/'
+    mnist = MNIST(path)
+    _, labels_num = mnist.load_training()
+    labels = one_hot(labels_num,10)
     images = prep_mnist_padded_images(5000)
     for ii,image in enumerate(images):
         if ii%2:
@@ -150,10 +167,13 @@ if __name__ == "__main__":
                       state_table=np.zeros([1,observation_size*hp.mem_depth]),
                       soft_q_type='boltzmann',
                       beta=0.1,
-                      arch='mlp')
+                      arch='mlp',
+                      n_classes=10)
 
-    if not(hp.initial_network is None):
-        RL.dqn.load_nwk_param(hp.initial_network)
+    if not(hp.dqn_initial_network is None):
+        RL.dqn.load_nwk_param(hp.dqn_initial_network)
+    if not(hp.dnn_initial_network is None):
+        RL.dnn.load_nwk_param(hp.dnn_initial_network)
     hp.scene = scene.hp
     hp.sensor = sensor.hp
     hp.agent = agent.hp

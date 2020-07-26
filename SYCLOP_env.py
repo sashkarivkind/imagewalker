@@ -220,6 +220,10 @@ class Rewards():
                 this_reward = self.Saccade_reward()
             elif reward_type == 'network':
                 this_reward = self.Network_intensity_reward()
+            elif reward_type == 'network_L1':
+                this_reward = self.Network_L1_intensity_reward()
+            elif reward_type == 'network_binary_activity':
+                this_reward = self.Network_binary_activity_reward()
             else:
                 error('unknown reward')
             self.reward_obj_list.append(this_reward)
@@ -236,7 +240,7 @@ class Rewards():
             error('under rebuilding, don\'t use')
             self.reconstruction = np.zeros([IMAGE_Y, IMAGE_X])
 
-        def update(self,sensor = None, agent = None):
+        def update(self, sensor=None, agent=None, **kwargs):
             self.copy_current_region()
             self.reward = -np.sqrt(np.mean((self.reconstruction - self.orig) ** 2))
             self.reconstruction *= RECONSTRUCT_DECAY
@@ -254,7 +258,7 @@ class Rewards():
             self.hp.alpha_decay = 1.0
             self.reward = 0
 
-        def update(self, sensor = None, agent = None, network=None):
+        def update(self, sensor=None, agent=None, **kwargs):
             self.reward = self.hp.alpha_decay*np.sqrt(np.mean(sensor.dvs_view ** 2)) + (1-self.hp.alpha_decay)*self.reward
 
     class Central_RMS_intensity_reward():
@@ -264,7 +268,7 @@ class Rewards():
             self.reward = 0
             self.th = 1e-3
 
-        def update(self, sensor = None, agent = None, network=None):
+        def update(self, sensor=None, agent=None, **kwargs):
             self.reward = self.hp.alpha_decay*np.sqrt(np.mean((1.0*sensor.central_dvs_view) ** 2))  + (1-self.hp.alpha_decay)*self.reward
 
     class Central_L1_intensity_reward():
@@ -274,7 +278,7 @@ class Rewards():
             self.reward = 0
             self.th = 1e-3
 
-        def update(self, sensor=None, agent=None, network=None):
+        def update(self, sensor=None, agent=None, **kwargs):
             self.reward = self.hp.alpha_decay * np.mean((1.0 * np.abs(sensor.central_dvs_view) ** 2)) + (1 - self.hp.alpha_decay) * self.reward
 
     class Central_homeostatic_intensity_reward():
@@ -285,7 +289,7 @@ class Rewards():
             self.reward = 0
             self.th = 1e-3
 
-        def update(self, sensor = None, agent = None, network=None):
+        def update(self, sensor=None, agent=None, **kwargs):
             self.reward = self.hp.alpha_decay*np.sqrt(np.mean(sensor.central_dvs_view ** 2)) + (1-self.hp.alpha_decay)*self.reward
             self.reward = -np.abs(self.reward-self.hp.target_intensity)
 
@@ -296,7 +300,7 @@ class Rewards():
             self.reward = 0
             self.th = 1e-3
 
-        def update(self, sensor = None, agent = None, network=None):
+        def update(self, sensor=None, agent=None, **kwargs):
             self.reward = self.hp.alpha_decay*(np.sqrt(np.mean(sensor.dvs_view ** 2))>self.th) + (1-self.hp.alpha_decay)*self.reward
 
     class Speed_reward():
@@ -305,14 +309,14 @@ class Rewards():
             self.hp.alpha_decay = 1.0
             self.reward = 0
 
-        def update(self, sensor = None, agent = None, network=None):
+        def update(self, sensor=None, agent=None, **kwargs):
             self.reward = self.hp.alpha_decay*np.sqrt(np.mean(agent.qdot**2)) + (1-self.hp.alpha_decay)*self.reward
 
     class Saccade_reward():
         def __init__(self):
             self.hp = HP()
 
-        def update(self, sensor = None, agent = None, network=None):
+        def update(self, sensor=None, agent=None, **kwargs):
             self.reward = 1.0*agent.saccade_flag
 
     class Boundary_reward():
@@ -321,7 +325,7 @@ class Rewards():
             self.hp.alpha_decay = 1.0
             self.reward = 0
 
-        def update(self, sensor = None, agent = None, network=None):
+        def update(self, sensor=None, agent=None, **kwargs):
             self.reward = self.hp.alpha_decay*( (agent.q_ana[0] < 1) or (agent.q_ana[0]>agent.max_q[0]-1) or (agent.q_ana[1] < 1) or (agent.q_ana[1]>agent.max_q[1]-1))\
                           + (1-self.hp.alpha_decay)*self.reward
 
@@ -332,7 +336,7 @@ class Rewards():
             self.reward = 0
             self.th = 1e-3
 
-        def update(self, sensor = None, agent = None, network=None):
+        def update(self, sensor=None, agent=None, **kwargs):
             self.reward = self.hp.alpha_decay*(np.sqrt(np.mean(sensor.central_dvs_view ** 2))>self.th) + (1-self.hp.alpha_decay)*self.reward
 
     class Debug_binary_intensity_reward(): #just
@@ -342,12 +346,30 @@ class Rewards():
             self.reward = 0
             self.th = 1e-3
 
-        def update(self, sensor = None, agent = None, network=None):
+        def update(self, sensor=None, agent=None, **kwargs):
             self.reward = self.hp.alpha_decay*(np.sqrt(np.var(sensor.central_frame_view))>self.th) + (1-self.hp.alpha_decay)*self.reward
 
-    class Network_intensity_reward(): #just
+    class Network_intensity_reward():  # just
         def __init__(self):
             self.hp = HP()
 
-        def update(self, sensor = None, agent = None, network=None):
-            self.reward = np.sqrt(np.mean(network**2))
+        def update(self, sensor=None, agent=None, **kwargs):
+            network=kwargs['network']
+            self.reward = np.sqrt(np.mean(network ** 2))
+
+    class Network_L1_intensity_reward():  # just
+        def __init__(self):
+            self.hp = HP()
+
+        def update(self, sensor=None, agent=None, **kwargs):
+            network=kwargs['network']
+            self.reward = np.mean(np.abs(network))
+
+    class Network_binary_activity_reward():  # just
+        def __init__(self):
+            self.hp = HP()
+            self.hp.epsilon=1e-6
+
+        def update(self, sensor=None, agent=None, **kwargs):
+            network=kwargs['network']
+            self.reward = np.mean(network>self.hp.epsilon)

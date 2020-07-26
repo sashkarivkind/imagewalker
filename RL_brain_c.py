@@ -1,5 +1,13 @@
 """
-Was developed based on: https://morvanzhou.github.io/tutorials/
+version _c
+in this version
+ -entropy measurement is enabled
+ -entropy is retuuurned together with the selected action
+ -kwargs from top level are passed to network instance
+
+-------
+
+this project used: https://morvanzhou.github.io/tutorials/ as the starting point
 
 """
 
@@ -37,7 +45,8 @@ class DeepQNetwork:
             dqn_mode=True,
             soft_q_type=None, #'boltzmann'
             beta=1,
-            arch='mlp'
+            arch='mlp',
+            **kwargs
             ):
 
         self.hp = HP()
@@ -85,7 +94,6 @@ class DeepQNetwork:
         self.soft_q_type = soft_q_type
         self.beta = beta
 
-
 # total learning step
         self.learn_step_counter = 0
 
@@ -98,12 +106,24 @@ class DeepQNetwork:
             self.q_eval = np.zeros((np.shape(state_table)[0],n_actions))
         else:
             self.cost_his = []
-            self.dqn = rlnet.DQN_net(self.hp.n_features_shaped, n_actions, learning_rate=self.lr, arch=arch)
+            self.dqn = rlnet.DQN_net(self.hp.n_features_shaped, n_actions, learning_rate=self.lr, arch=arch, **kwargs)
+            if self.shape_fun is None:
+                self.input_shapes = [[(uu.value if uu.value is not None else -1) for uu in zz.shape] for zz in
+                          self.dqn.q_eval.net.inputs]
+                self.shape_fun = lambda x: self.prep_shape_fun(x,self.input_shapes)
             sess = tf.Session()
             self.dqn.assign_session_to_nwk(sess)
             self.dqn.sess.run(tf.global_variables_initializer())
             self.dqn.reset()
 
+    def prep_shape_fun(self,data,shapes):
+        pntr = 0
+        shaped_inputs =[]
+        for shape in shapes:
+            offset = np.prod(shape[1:]) #first entry of shape is -1, standing for the flexible  batch size
+            shaped_inputs.append(np.reshape(data[:,pntr:pntr+offset],shape))
+            pntr+=offset
+        return shaped_inputs
 
     def approx_by_table_entry(self, states):
         return np.argmin(ssd.cdist(self.state_table, states), axis=0)
@@ -130,18 +150,15 @@ class DeepQNetwork:
         if self.soft_q_type == 'boltzmann':
             boltzmann_measure = np.exp(self.beta * (actions_value-np.max(actions_value))) #todo here substracted max to avoid exponent exploding. need to be taken into a separate function!
             boltzmann_measure = boltzmann_measure / np.sum(boltzmann_measure, axis=1)
-            #todo this is a sanity check, to be removed at some point
-            ppp=np.abs(np.sum(boltzmann_measure)-1)
-            if ppp>1e-5:
-                print('debug prob:',ppp,'------', actions_value,'-----------',boltzmann_measure)
-            #end of todo
+            entropy = -boltzmann_measure*np.log(boltzmann_measure)
             action = np.random.choice(list(range(self.n_actions)),1, p=boltzmann_measure.reshape([-1]))[0]
         else:
             if np.random.uniform() < self.epsilon:
                 action = np.argmax(actions_value)
             else:
                 action = np.random.randint(0, self.n_actions)
-        return action
+            entropy = np.nan #todo
+        return action, entropy
 
     def compute_q_eval(self, state, match_th=1e-5):
         if self.dqn_mode:
@@ -160,7 +177,11 @@ class DeepQNetwork:
     def map_actions(self, observation): #todo rewrite in matrix form
         actions_values = self.dqn.eval_eval(observation)
         return actions_values
-
+    def update_beta(self,beta):
+        if self.hp.beta == 'dynamic':
+            self.beta = beta
+        else:
+            error('attempt to update beta in a fixed beta mode!')
     def learn(self):
         if self.dqn_mode:
             # check to replace target parameters

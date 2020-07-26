@@ -13,18 +13,17 @@ hp=HP()
 hp.save_path = 'saved_runs'
 hp.this_run_name = sys.argv[0] + '_noname_' + str(int(time.time()))
 # hp.description = "only 2nd image from videos 1st frame, penalty for speed, soft q learning"
-hp.description = "hello neu, L1 penalty on the 2nd layer out of 4,small initial weights" #, 10x slower learning, x10 longer run "
-# hp.description = "video dataset, 40 stills, VFB!!!!, 2 layer,  Normalized Speed (hard coded)" #, 10x slower learning, x10 longer run "
+hp.description = "cnn on mnist, 50% inversed, 5000 images"
 hp.mem_depth = 1
 hp.max_episode = 10000
 hp.steps_per_episode = 100
 hp.steps_between_learnings = 100
-hp.fading_mem = 0.5 ### fading memory migrated directly into the DVS view
+hp.fading_mem = 0.5
 recorder_file = 'records.pkl'
 hp_file = 'hp.pkl'
 hp.contrast_range = [1.0,1.1]
 hp.logmode = False
-hp.initial_network = None #'saved_runs/run_syclop_vfb1_neu.py_noname_1586162888_0/tempX_1.nwk'
+hp.dqn_initial_network = None #'saved_runs/run_syclop_generic_cnn1.py_noname_1588239131_0/tempX_1.nwk'
 
 if not os.path.exists(hp.save_path):
     os.makedirs(hp.save_path)
@@ -46,8 +45,13 @@ if not dir_success:
 
 def local_observer(sensor,agent):
     normfactor=1.0/256.0
-    return normfactor*np.concatenate([relu_up_and_down(sensor.central_dvs_view),
-            relu_up_and_down(cv2.resize(1.0*sensor.dvs_view, dsize=(16, 16), interpolation=cv2.INTER_AREA)), agent.qdot/normfactor ])
+    return np.concatenate([normfactor*sensor.dvs_view.reshape([-1]), agent.qdot])
+
+def local_shape_fun(observation):
+    conv_part=lambda x: np.reshape(x,[-1]+list(np.shape(sensor.dvs_view))+[1])
+    return [conv_part(observation[:-2]), observation[-2:]]
+
+
 def run_env():
     old_policy_map=0
     step = 0
@@ -70,8 +74,7 @@ def run_env():
         sensor.update(scene, agent)
         for step_prime in range(hp.steps_per_episode):
             action = RL.choose_action(observation.reshape([-1]))
-            net = RL.dqn.eval_incl_layers(observation.reshape([1, -1]))
-            reward.update_rewards(sensor = sensor, agent = agent, network=net[2])
+            reward.update_rewards(sensor = sensor, agent = agent)
             running_ave_reward = 0.999*running_ave_reward+0.001*np.array([reward.reward]+reward.rewards.tolist())
             if step % 10000 < 1000:
                 # print([agent.q_ana[0], agent.q_ana[1], reward.reward] , reward.rewards , [RL.epsilon])
@@ -106,19 +109,15 @@ def run_env():
 if __name__ == "__main__":
 
     recorder = Recorder(n=6)
-    # #load Liron's dataset
-    # images = read_images_from_path('../video_datasets/liron_images/*.jpg')
-    # images = [np.sum(1.0*uu, axis=2) for uu in images]
-    # images = [cv2.resize(uu, dsize=(256, 256-64), interpolation=cv2.INTER_AREA) for uu in images]
 
     # images = read_images_from_path('/home/bnapp/arivkindNet/video_datasets/stills_from_videos/some100img_from20bn/*')
     # images = some_resized_mnist(n=400)
-    # images = prep_mnist_sparse_images(400,images_per_scene=20)
     images = prep_mnist_padded_images(5000)
     for ii,image in enumerate(images):
         if ii%2:
             images[ii]=-image+np.max(image)
-    # images = read_images_from_path('/home/bnapp/arivkindNet/video_datasets/stills_from_videos/some100img_from20bn/*',max_image=40)
+    # images = prep_mnist_sparse_images(400,images_per_scene=20)
+    # images = read_images_from_path('/home/bnapp/arivkindNet/video_datasets/stills_from_videos/some100img_from20bn/*',max_image=10)
     # images = [images[1]]
     # images = [np.sum(1.0*uu, axis=2) for uu in images]
     # images = [cv2.resize(uu, dsize=(256, 256-64), interpolation=cv2.INTER_AREA) for uu in images]
@@ -133,11 +132,12 @@ if __name__ == "__main__":
     sensor = syc.Sensor( log_mode=False, log_floor = 1.0)
     agent = syc.Agent(max_q = [scene.maxx-sensor.hp.winx,scene.maxy-sensor.hp.winy])
 
-    reward = syc.Rewards(reward_types=['central_rms_intensity', 'speed','network'],relative_weights=[1.0,-float(sys.argv[1]),-0])
-    # reward = syc.Rewards(reward_types=['central_rms_intensity', 'speed','network_L1'],relative_weights=[0.0,-float(sys.argv[1]),-100])
+    reward = syc.Rewards(reward_types=['central_rms_intensity', 'speed', 'saccade'],relative_weights=[1.0,-float(sys.argv[1]),-200])
     # observation_size = sensor.hp.winx*sensor.hp.winy*2
-    observation_size = 256*4+2
-    RL = DeepQNetwork(len(agent.hp.action_space), observation_size*hp.mem_depth,#sensor.frame_size+2,
+    observation_size = 64*64
+    RL = DeepQNetwork(len(agent.hp.action_space), observation_size,
+                      n_features_shaped=list(np.shape(sensor.dvs_view))+[1],
+                      shape_fun= local_shape_fun,
                       reward_decay=0.99,
                       e_greedy=0.95,
                       e_greedy0=0.8,
@@ -150,10 +150,12 @@ if __name__ == "__main__":
                       state_table=np.zeros([1,observation_size*hp.mem_depth]),
                       soft_q_type='boltzmann',
                       beta=0.1,
-                      arch='mlp')
-
-    if not(hp.initial_network is None):
-        RL.dqn.load_nwk_param(hp.initial_network)
+                      arch='conv'
+                      )
+    # RL.dqn.load_nwk_param('tempX_1.nwk')
+    # RL.dqn.save_nwk_param('liron_encircle.nwk')
+    if not(hp.dqn_initial_network is None):
+        RL.dqn.load_nwk_param(hp.dqn_initial_network)
     hp.scene = scene.hp
     hp.sensor = sensor.hp
     hp.agent = agent.hp
