@@ -13,9 +13,24 @@ this project used: https://morvanzhou.github.io/tutorials/ as the starting point
 
 import numpy as np
 import tensorflow as tf
+# gpus = tf.config.experimental.list_physical_devices('GPU')
+#
+# if gpus:
+#   try:
+#     # Currently, memory growth needs to be the same across GPUs
+#     for gpu in gpus:
+#       tf.config.experimental.set_memory_growth(gpu, True)
+#     logical_gpus = tf.config.experimental.list_logical_devices('GPU')
+#     print(len(gpus), "Physical GPUs,", len(logical_gpus), "Logical GPUs")
+#   except RuntimeError as e:
+#     # Memory growth must be set before GPUs have been initialized
+#     print(e)
+
+
 import scipy.spatial.distance as ssd
 import RL_networks as rlnet
 from misc import *
+import time
 # np.random.seed(1)
 # tf.set_random_seed(1)
 # np.set_printoptions(threshold=np.nan)
@@ -101,7 +116,7 @@ class DeepQNetwork:
         self.beta_scheduler(-1)
 
         # initialize zero memory [s, a, r, s_]
-        self.memory = np.zeros((self.memory_size, n_features * 2 + 2))
+        self.memory = np.zeros((self.memory_size, n_features  + 2)) #todo: this is a brute force bandit mode
 
         # consist of [target_net, evaluate_net]
         if not self.dqn_mode:
@@ -116,8 +131,8 @@ class DeepQNetwork:
                 self.shape_fun = lambda x: self.prep_shape_fun(x,self.input_shapes)
             sess = tf.Session()
             self.dqn.assign_session_to_nwk(sess)
-            self.dqn.sess.run(tf.global_variables_initializer())
-            self.dqn.reset()
+            # self.dqn.sess.run(tf.global_variables_initializer())
+            # self.dqn.reset()
 
 
     def prep_shape_fun(self,data,shapes):
@@ -132,25 +147,31 @@ class DeepQNetwork:
     def approx_by_table_entry(self, states):
         return np.argmin(ssd.cdist(self.state_table, states), axis=0)
 
-    def store_transition(self, s, a, r, s_):
+    def store_transition(self, s, a, r, s_=None, bandit_mode=True):
         if not hasattr(self, 'memory_counter'):
             self.memory_counter = 0
 
-        transition = np.hstack((s, [a, r], s_))
+        if bandit_mode:
+            transition = np.hstack((s, [a, r]))
+        else:
+            transition = np.hstack((s, [a, r], s_))
 
         # replace the old memory with new memory
         index = self.memory_counter % self.memory_size
         self.memory[index, :] = transition
         self.memory_counter += 1
 
-    def choose_action(self, observation):
+    def choose_action(self, observation, discard_black_areas=False, black_area=None):
         # to have batch dimension when feed into tf placeholder
         observation = observation[np.newaxis, :]
         actions_value = self.compute_q_eval(self.shape_fun(observation)) #todo - this computation was taken out of if to ensure all states are added
-
+        if discard_black_areas:
+            shp = actions_value.shape
+            actions_value = actions_value - np.min(actions_value) #ensure actions are non-negative
+            actions_value = (actions_value.reshape(black_area.shape)*black_area).reshape(shp) #null values at black areas
         # self.current_val=np.max(actions_value) #todo debud
         # self.delta_val=np.max(actions_value)-np.min(actions_value) #todo debud
-
+        # print('debug saccader',actions_value.reshape([64,64]))
         if self.soft_q_type == 'boltzmann':
             boltzmann_measure = np.exp(self.beta * (actions_value-np.max(actions_value))) #todo here substracted max to avoid exponent exploding. need to be taken into a separate function!
             boltzmann_measure = boltzmann_measure / np.sum(boltzmann_measure, axis=1)
@@ -168,15 +189,7 @@ class DeepQNetwork:
         if self.dqn_mode:
             return self.dqn.eval_eval(state)
         else:
-            dd=(np.sum((self.state_table - state)**2, axis=1)) #todo - generalize beyond eucledian distance
-            if np.min(dd) < match_th:
-                ii = np.argmin(dd)
-            else:
-                self.state_table = np.vstack([self.state_table, state])
-                self.q_eval =np.vstack([self.q_eval,np.zeros([self.n_actions])])
-                ii = self.state_table.shape[0] - 1
-            #print(ii, state)
-            return self.q_eval[ii,:]
+            error
 
     def map_actions(self, observation): #todo rewrite in matrix form
         actions_values = self.dqn.eval_eval(observation)
@@ -187,11 +200,12 @@ class DeepQNetwork:
         else:
             error('attempt to update beta in a fixed beta mode!')
     def learn(self):
-        if self.dqn_mode:
+        # if self.dqn_mode:
             # check to replace target parameters
-            if self.learn_step_counter % self.replace_target_iter == 0:
-                self.dqn.update_q_next()
-                # print('\ntarget_params_replaced\n')
+            # todo: this is not relevant for "bandit" mode. For now just commented out, but maybe better to remove in future....
+        #   if self.learn_step_counter % self.replace_target_iter == 0:
+            #     self.dqn.update_q_next()
+            #     # print('\ntarget_params_replaced\n')
 
         # sample batch memory from all memory
         if self.memory_counter > self.memory_size:
@@ -205,46 +219,46 @@ class DeepQNetwork:
         reward = batch_memory[:, self.n_features + 1]
 
         if self.dqn_mode:
-            q_next, q_eval = [self.dqn.eval_next(self.shape_fun(batch_memory[:, -self.n_features:])),
-                              self.dqn.eval_eval(self.shape_fun(batch_memory[:, :self.n_features]))]
+            # todo - discarding q_next due to bandit mode:
+            #  q_next, q_eval = [self.dqn.eval_next(self.shape_fun(batch_memory[:, -self.n_features:])),
+            #                   self.dqn.eval_eval(self.shape_fun(batch_memory[:, :self.n_features]))]
+            q_eval = self.dqn.eval_eval(self.shape_fun(batch_memory[:, :self.n_features]))
 
             # change q_target w.r.t q_eval's action
             q_target = q_eval.copy()
             self.debu1 = q_target.copy()
             # q_target[batch_index, eval_act_index] = reward + self.gamma * np.max(q_next, axis=1)
 
-            if self.double_q:
-                q_next_estim=max_by_different_argmax(q_next,q_eval,axis=1)
-            else:
-                q_next_estim=np.max(q_next, axis=1)
+            # if self.double_q:
+            #     q_next_estim=max_by_different_argmax(q_next,q_eval,axis=1)
+            # else:
+            #     q_next_estim=np.max(q_next, axis=1)
 
-            if self.soft_q_type=='uniform': #todo combine with the previous if
-                q_next_estim = (1-self.soft_q_factor)*q_next_estim+self.soft_q_factor*np.mean(q_next, axis=1)
-            elif self.soft_q_type=='boltzmann':
-                boltzmann_measure = np.exp(self.beta*(q_next-np.max(q_next,axis=1).reshape([-1,1])))
-                boltzmann_measure = boltzmann_measure/np.sum(boltzmann_measure,axis=1).reshape([-1,1])
-                q_next_estim=np.sum(boltzmann_measure*q_next, axis=1)
-            elif self.soft_q_type is None:
-                pass
-            else:
-                error('unsupoorted type of soft q')
-            q_target[batch_index, eval_act_index] = (1-self.table_alpha)*q_target[batch_index, eval_act_index] + self.table_alpha*(reward + self.gamma * q_next_estim)
-            self.debu2 = q_target.copy()
+            # if self.soft_q_type=='uniform': #todo combine with the previous if
+            #     q_next_estim = (1-self.soft_q_factor)*q_next_estim+self.soft_q_factor*np.mean(q_next, axis=1)
+            # elif self.soft_q_type=='boltzmann':
+            #     boltzmann_measure = np.exp(self.beta*(q_next-np.max(q_next,axis=1).reshape([-1,1])))
+            #     boltzmann_measure = boltzmann_measure/np.sum(boltzmann_measure,axis=1).reshape([-1,1])
+            #     q_next_estim=np.sum(boltzmann_measure*q_next, axis=1)
+            # elif self.soft_q_type is None:
+            #     pass
+            # else:
+            #     error('unsupoorted type of soft q')
+            q_target[batch_index, eval_act_index] = (1-self.table_alpha)*q_target[batch_index, eval_act_index] + self.table_alpha*reward #todo: generaliza back beyond bant mode....
             stopflag = False
             qlearn_step = 0
 
             while not stopflag:
+                # tt0=time.time()
                 _, self.cost = self.dqn.training_step(self.shape_fun(batch_memory[:, :self.n_features]),q_target)
+                # print('inner time:', time.time()-tt0, '  step  ', qlearn_step)
                 # print('cost:',self.cost)
                 qlearn_step +=1
                 stopflag  = self.cost < self.qlearn_tol or qlearn_step > self.max_qlearn_steps
                 #print('cost', self.cost)
             self.cost_his.append(self.cost)
-        else:
-            batch_table_index = self.approx_by_table_entry(batch_memory[:, :self.n_features])   #todo generalize the distance
-            batch_table_index_ = self.approx_by_table_entry(batch_memory[:, -self.n_features:])  #todo generalize the distance
-            self.q_eval[batch_table_index, eval_act_index] = (1-self.table_alpha)*self.q_eval[batch_table_index, eval_act_index] + \
-                self.table_alpha*(reward + self.gamma * np.max(self.q_eval[batch_table_index_, :], axis=1))
+        else: #discarding non-dqn mode
+            error
 
 
         # increasing epsilon

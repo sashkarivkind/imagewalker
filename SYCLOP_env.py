@@ -3,6 +3,8 @@ import numpy as np
 import time
 import sys
 from misc import HP
+import cv2
+# cv2.ocl.setUseOpenCL(True)
 
 if sys.version_info.major == 2:
     import Tkinter as tk
@@ -34,15 +36,21 @@ class Scene():
             error #not implemented yet
 
 class Sensor():
-    def __init__(self, log_mode=False, log_floor = 1e-3, fading_mem=0.0):
-        self.hp = HP
-        self.hp.winx = 16*4
-        self.hp.winy = 16*4
-        self.hp.centralwinx = 4*4
-        self.hp.centralwiny = 4*4
+    def __init__(self, log_mode=False, log_floor = 1e-3, fading_mem=0.0, fisheye=None,**kwargs):
+
+        defaults = HP()
+        defaults.winx = 16*4
+        defaults.winy = 16*4
+        defaults.centralwinx = 4*4
+        defaults.centralwiny = 4*4
+        defaults.fading_mem = fading_mem
+        defaults.fisheye = fisheye
+        defaults.resolution_fun = None
+
+        self.hp = HP()
         self.log_mode = log_mode
         self.log_floor = log_floor
-        self.hp.fading_mem = fading_mem
+        self.hp.upadte_with_defaults(att=kwargs, default_att=defaults.__dict__)
 
 
         self.cwx1 = (self.hp.winx-self.hp.centralwinx)//2
@@ -74,8 +82,19 @@ class Sensor():
             return current_frame - previous_frame
 
     def get_view(self,scene,agent):
-        return scene.image[scene.maxy - agent.q[1] - self.hp.winy: scene.maxy - agent.q[1],
-               agent.q[0]: agent.q[0]+self.hp.winx]
+        if self.hp.fisheye is None:
+            img=scene.image
+        else:
+            cam = 0. + self.hp.fisheye['cam']
+            cam[:2,2]=np.array([agent.q[0]+self.hp.winx//2, scene.maxy - agent.q[1] - self.hp.winy//2])
+            # print('debug cam', cam)
+            # print('debug cv openCL:', cv2.ocl.useOpenCL())
+            img = cv2.undistort(scene.image,cam,self.hp.fisheye['dist'])
+        view =  img[scene.maxy - agent.q[1] - self.hp.winy: scene.maxy - agent.q[1],
+           agent.q[0]: agent.q[0]+self.hp.winx]
+        if self.hp.resolution_fun is not None:
+            view = self.hp.resolution_fun(view)
+        return view
 
 class Agent():
     def __init__(self,max_q = None):
@@ -98,6 +117,17 @@ class Agent():
         self.qdotdot = np.array([0.0,0.0])
         self.q = np.int32(np.floor(self.q_ana))
 
+    def set_manual_q(self,q):
+        self.q = q
+
+    def set_manual_trajectory(self,manual_q_sequence,manual_t=0):
+        self.manual_q_sequence = manual_q_sequence
+        self.manual_t = manual_t
+
+    def manual_act(self):
+        self.q = self.manual_q_sequence[self.manual_t]
+        self.manual_t += 1
+        self.manual_t %= len(self.manual_q_sequence)
 
     def act(self,a):
         if a is None:
@@ -373,3 +403,21 @@ class Rewards():
         def update(self, sensor=None, agent=None, **kwargs):
             network=kwargs['network']
             self.reward = np.mean(network>self.hp.epsilon)
+
+
+class Saccadic_Agent():
+    # a very simple object, taylored for saccade action
+    def __init__(self, q_init=[0,0],max_q = None):
+        self.hp = HP()
+        self.reset(q_reset=q_init,max_q=max_q)
+
+    def reset(self, q_reset=[0, 0],max_q=None):
+        self.q = np.array(q_reset) if type(q_reset)==list else q_reset
+        if max_q is not None:
+            self.max_q=max_q
+    def act(self,deltaq):
+        self.q+=np.array(deltaq)
+        self.q[0]=np.max([0,self.q[0]])
+        self.q[1]=np.max([0,self.q[1]])
+        self.q[0]=np.min([self.max_q[0],self.q[0]])
+        self.q[1]=np.min([self.max_q[1],self.q[1]])

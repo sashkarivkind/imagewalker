@@ -23,7 +23,7 @@ recorder_file = 'records.pkl'
 hp_file = 'hp.pkl'
 hp.contrast_range = [1.0,1.1]
 hp.logmode = False
-hp.dqn_initial_network = None #'saved_runs/run_syclop_generic_cnn1.py_noname_1588239131_0/tempX_1.nwk'
+hp.dqn_initial_network = 'saved_runs/run_syclop_generic_cnn_vfb_neu.py_noname_1590422112_0/tempX_1.nwk'# None #'saved_runs/run_syclop_generic_cnn1.py_noname_1588239131_0/tempX_1.nwk'
 
 if not os.path.exists(hp.save_path):
     os.makedirs(hp.save_path)
@@ -84,7 +84,7 @@ def run_env():
             if step % 10000 < 1000:
                 # print([agent.q_ana[0], agent.q_ana[1], reward.reward] , reward.rewards , [RL.epsilon])
                 # print(type([agent.q_ana[0], agent.q_ana[1], reward.reward]) , type(reward.rewards), type([RL.epsilon]))
-                recorder.record([agent.q_ana[0],agent.q_ana[1],reward.reward]+reward.rewards.tolist()+[RL.epsilon])
+                recorder.record([agent.q_ana[0],agent.q_ana[1],reward.reward]+reward.rewards.tolist()+[RL.beta])
             agent.act(action)
             sensor.update(scene,agent)
             # scene.update()
@@ -97,7 +97,7 @@ def run_env():
                 RL.learn()
             if step%1000 ==0:
                 print(episode,step,' running reward   ',running_ave_reward)
-                print('frame:', scene.current_frame,)
+                print('frame:', scene.current_frame,'  beta:', RL.beta, ' entropy', ee)
                 if running_ave_reward[0] > best_thus_far:
                     best_thus_far = running_ave_reward[0]
                     RL.dqn.save_nwk_param(hp.this_run_path+'best_liron.nwk')
@@ -155,6 +155,7 @@ if __name__ == "__main__":
                       state_table=np.zeros([1,observation_size*hp.mem_depth]),
                       soft_q_type='boltzmann',
                       beta=0.1,
+                      beta_schedule=[[4000,0.1],[7000,1.0]],
                       arch='conv_ctrl'
                       )
     # RL.dqn.load_nwk_param('tempX_1.nwk')

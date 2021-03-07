@@ -31,6 +31,7 @@ recorder_file = 'records.pkl'
 hp_file = 'hp.pkl'
 hp.contrast_range = [1.0,1.1]
 hp.logmode = False
+hp.num_images = 200
 hp.dqn_initial_network = 'saved_runs/run_syclop_generic_cnn_vfb_neu.py_noname_1590422112_0/tempX_1.nwk'  # None #'saved_runs/run_syclop_generic_cnn_vfb_neu.py_noname_1589383850_0/tempX_1.nwk'
 if not os.path.exists(hp.save_path):
     os.makedirs(hp.save_path)
@@ -127,7 +128,9 @@ if __name__ == "__main__":
     #     if ii%2:
     #         images[ii]=-image+np.max(image)
     # images = prep_mnist_sparse_images(400,images_per_scene=20)
-    images = read_images_from_path('/home/bnapp/arivkindNet/video_datasets/stills_from_videos/some100img_from20bn/*',max_image=10)
+    # images = read_images_from_path('/home/bnapp/arivkindNet/video_datasets/stills_from_videos/some100img_from20bn/*',max_image=10)
+    images = read_images_from_path('/home/labs/ahissarlab/arivkind/video_datasets/stills_from_videos/some100img_from20bn/*',max_image=hp.num_images)
+
     # images = [images[1]]
     # images = [np.sum(1.0*uu, axis=2) for uu in images]
     # images = [cv2.resize(uu, dsize=(256, 256-64), interpolation=cv2.INTER_AREA) for uu in images]
@@ -162,6 +165,7 @@ if __name__ == "__main__":
                       state_table=np.zeros([1,observation_size*hp.mem_depth]),
                       soft_q_type='boltzmann',
                       beta=1.0,
+                      beta_schedule=[[4000, 0.1], [7000, 1.0]],
                       arch='conv_ctrl',
                       train_starting_from_layer=2
                       )

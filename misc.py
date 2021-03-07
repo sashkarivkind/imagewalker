@@ -6,19 +6,30 @@ from scipy import misc
 from mnist import MNIST
 import cv2
 import sys
+import copy
 
 
 class HP:
-    pass
+    def update_attributes_from_file(self,file,attributes):
+        with open(file,'rb') as f:
+            temp_hp=pickle.load(f)
+        for att in attributes:
+           self.__dict__[att] = copy.copy(temp_hp.__dict__[att])
+    def upadte_with_defaults(self,att={},default_att={}):
+        self.__dict__ = {kk:(att[kk] if kk in att.keys() else default_att[kk]) for kk in default_att.keys()}
 
 class Logger:
     def __init__(self,log_name):
+        self.log_name = log_name
         self.terminal = sys.stdout
         self.log = open(log_name, "w")
+        self.log.close()
 
     def write(self, message):
         self.terminal.write(message)
+        self.log = open(self.log_name, "a")
         self.log.write(message)
+        self.log.close() #to make log readable at all times...
 
     def flush(self):
         #this flush method is needed for python 3 compatibility.
@@ -76,6 +87,10 @@ def one_hot(a,depth):
     o[list(range(len(a))),a]=1
     return o
 
+def softmax(x,axis=1):
+    ee=np.exp(x)
+    return(ee/np.sum(ee,axis=axis)[...,np.newaxis])
+
 def magnify_image(img,factor):
     return np.kron(img,np.ones([factor,factor]))
 
@@ -124,16 +139,36 @@ def pwl_to_wave(pwl):
         w_prev = w_this
     return wave
 
+
+
 def read_images_from_path(path = None, filenames = None, max_image=1e7):
     if filenames is None:
         filenames = sorted(glob.glob(path))
     images=[]
     for cnt, image_path in enumerate(filenames):
         if cnt<max_image:
-            images.append(1.0* misc.imread(image_path))
+            images.append(1.0* plt.imread(image_path))#todo: doublecheck the scaling (may be x255 needed)
         else:
             break
     return images
+
+
+def read_random_image_from_path(path = None, grayscale=False, padding=None):
+    filenames = sorted(glob.glob(path))
+    filename=filenames[np.random.randint(len(filenames))]
+    image=1.0* plt.imread(filename)#todo: doublecheck the scaling (may be x255 needed)
+    if grayscale:
+        if len(image.shape)==3:
+            image=np.mean(image,axis=2)
+    if padding is not None:
+        image = add_padding(image,padding)
+    return image,filename
+
+def add_padding(image,padding):
+    shp=image.shape
+    new_image = np.zeros(np.array(shp)+2*np.array(padding))
+    new_image[padding[0]:padding[0]+shp[0],padding[1]:padding[1]+shp[1]] = image
+    return new_image
 
 def relu_up_and_down(x,downsample_fun = lambda x: x):
     x=downsample_fun(x)
@@ -198,5 +233,16 @@ def prep_n_grams(x,n=None,offsets=None):
         else:
             ngram_dict[this_ngram] = 1
     return ngram_dict
+
+def undistort_q_poly(dq,w,cm=None, epsilon=1e-9): #undistort from fisheye, using polinomial fit
+    if cm is None:
+        cm = np.array([[0,0]])
+    xy = dq-cm
+    r = np.sqrt(np.sum(xy**2,axis=1))
+    powvec = np.array([list(range(len(w)))])
+    rnew = (r[..., np.newaxis]**powvec) @ w
+    xynew = xy *(rnew / (r+epsilon))[..., np.newaxis]
+    dqnew = xynew + cm
+    return dqnew
 
 

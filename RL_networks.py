@@ -84,7 +84,9 @@ class Stand_alone_net(): #wrapper for network
                   feed_dict=self.observation_receiver(observations))
 
     def eval_incl_layers(self,observations):
-        return self.net.sess.run([self.net.estimator]+[self.net.layers[uu] for uu in sorted(self.net.layers.keys())]+[self.net.reg_term],
+        # print('debu---------------------------------------------------------------------------',[self.net.estimator]+[self.net.layers[uu] for uu in sorted(self.net.layers.keys())]+[self.net.reg_term])
+        # print('debu---------------------------------------------------------------------------',[self.net.estimator]+[uu for uu in sorted(self.net.layers.keys())]+[self.net.reg_term])
+        return self.net.sess.run([self.net.estimator]+[self.net.layers[uu] for uu in sorted(self.net.layers.keys())], #todo: +[self.net.reg_term],
                   feed_dict=self.observation_receiver(observations))
 
     def save_nwk_param(self, filename):
@@ -111,12 +113,15 @@ class Network():
                             'loss_type' : 'mean_squared',
                             'lambda_reg' : 0.0,
                             'scale_layer_en' : True,
-                            'train_starting_from_layer' : None
+                            'train_starting_from_layer' : None,
+                            'n_modulating_features': 100
+
                           }
 
         default_layer_size={'mlp':  [None]+[400]*1+[200]*3+[10,10]*0+[ None],
                             'conv': [None]+[[3,3,32]]+[[2,2,16]]+[200]+[ None],
                             'conv_ctrl': [None] + [[3, 3, 32]] + [[2, 2, 16]] + [200] + [None],
+                            'conv_saccades_v1': [None] + [[3, 3, 32]] +[[3, 3, 32]] + [[2, 2, 1]] + [None],
                             'conv_ctrl_fade_v1': [None] + [[3, 3, 32]] + [[2, 2, 16]] + [200] + [None]}
 
         print('debug n_features:',n_features)
@@ -133,14 +138,15 @@ class Network():
         self.inputs=[]
 
         if self.hp.arch == 'mlp':
-            self.estimator = self.vanilla_network(layer_size=self.hp.layer_size)
+            self.estimator = self.vanilla_network(**self.hp.__dict__)
         elif self.hp.arch == 'conv':
-            self.estimator = self.conv_network(layer_size=self.hp.layer_size)
+            self.estimator = self.conv_network(**self.hp.__dict__)
         elif self.hp.arch == 'conv_ctrl':
-            self.estimator = self.conv_network_with_ctrls(layer_size=self.hp.layer_size)
+            self.estimator = self.conv_network_with_ctrls(**self.hp.__dict__)
         elif self.hp.arch == 'conv_ctrl_fade_v1':
-            self.estimator = self.conv_network_with_ctrls_and_fading_v1(layer_size=self.hp.layer_size)
-
+            self.estimator = self.conv_network_with_ctrls_and_fading_v1(**self.hp.__dict__)
+        elif self.hp.arch == 'conv_saccades_v1':
+            self.estimator = self.conv_network_for_saccades_v1(**self.hp.__dict__)
         else:
             error
 
@@ -183,11 +189,16 @@ class Network():
         self.next_layer_id +=1
         return this_layer_id
 
-    def vanilla_network(self, layer_size = [None]+[400]+[200]*3+[ None]):
-        layer_size[0] = self.n_features
-        layer_size[-1] = self.n_actions
-        next_l = self.input_layer() #todo currently the  number of features in the input layer is defined elsewhere
-        self.inputs.append(next_l)
+    def vanilla_network(self, layer_size = [None]+[400]+[200]*3+[ None], alternative_io={'initial_layer':None,'n_outputs':None},**kwargs):
+        if alternative_io['initial_layer'] is None:
+            layer_size[0] = self.n_features
+            layer_size[-1] = self.n_actions
+            next_l = self.input_layer() #todo currently the  number of features in the input layer is defined elsewhere
+            self.inputs.append(next_l)
+        else:
+            next_l =  alternative_io['initial_layer']
+            layer_size[-1] = alternative_io['n_outputs']
+
         for ll, ll_size  in enumerate(layer_size[1:-1]):
             next_l = self.dense_ff_layer(next_l, ll_size)
             # next_l = tf.nn.dropout(next_l, 0.95)
@@ -197,7 +208,7 @@ class Network():
             next_l = self.scaling_layer(next_l)
         return next_l
 
-    def conv_network(self, layer_size = [None]+[[3,3,32]]+[[2,2,16]]+[200]+[ None]):
+    def conv_network(self, layer_size = [None]+[[3,3,32]]+[[2,2,16]]+[200]+[ None],**kwargs):
         layer_size[0] = self.n_features
         layer_size[-1] = self.n_actions
         next_l = self.input_layer2d() #todo currently the  number of features in the input layer is defined elsewhere
@@ -213,7 +224,7 @@ class Network():
         next_l = self.dense_ff_layer(next_l, ll_size, nl= lambda x: x, g=1e-10)
         return next_l
 
-    def conv_network_with_ctrls(self, layer_size = [None]+[[3,3,32]]+[[2,2,16]]+[200]+[ None]):
+    def conv_network_with_ctrls(self, layer_size = [None]+[[3,3,32]]+[[2,2,16]]+[200]+[ None],**kwargs):
         #an architechture of cnn with control signals merged at the first dense layer
         layer_size[0] = self.n_features
         layer_size[-1] = self.n_actions
@@ -262,6 +273,40 @@ class Network():
         next_l = self.dense_ff_layer(next_l, ll_size, nl= lambda x: x, g=1e-10)
         return next_l
 
+    def conv_network_for_saccades_v1(self, layer_size = [None]+[[3,3,32]]+[[2,2,16]]+[ None],layer_with_modulation=1,n_modulating_features=100,**kwargs):
+        #an architechture of cnn with modulation to one of the convolutional layers
+        #each channel is multiplied by a modulating signal
+        layer_size[0] = self.n_features
+        layer_size[-1] = self.n_actions
+        next_l = self.input_layer2d() #todo currently the  number of features in the input layer is defined elsewhere
+        self.inputs.append( next_l )#visual input
+
+        self.inputs.append(self.input_layer(size=n_modulating_features) ) #controls, i.e. speed signal
+
+        merged_ctrls = False
+        for ll, ll_size  in enumerate(layer_size[1:-1]):
+            if type(ll_size)==list:
+                next_l = self.conv2d_layer(next_l, ll_size,stride=[1,1])
+                if ll == layer_with_modulation: #todo generalize
+                    modulation_factors =  self.vanilla_network(layer_size = [None]+[30]+[ None],
+                                                          alternative_io={'initial_layer':self.inputs[1],
+                                                                          'n_outputs': np.shape(next_l)[-1].value})
+                    next_l *= tf.reshape(modulation_factors,[-1,1,1,np.shape(next_l)[-1].value])
+                self.reg_counter_l1+=tf.reduce_mean(tf.abs(next_l))
+                # next_l = tf.nn.max_pool(next_l,[1,3,3,1],[1,1,1,1],'SAME')
+            else:
+                error
+            print('debudebu layer_shape:',np.shape(next_l))
+        #triggered at the first fully connected layer
+        #         next_l_prime = tf.contrib.layers.flatten(next_l)
+        #         next_l_prime = next_l_prime if merged_ctrls else tf.concat([next_l_prime,self.inputs[1]],1)
+        #         next_l = self.dense_ff_layer(next_l_prime, ll_size)
+        #         merged_ctrls = True
+        # ll_size=layer_size[-1]
+        # next_l = self.dense_ff_layer(next_l, ll_size, nl= lambda x: x, g=1e-10)
+        return tf.contrib.layers.flatten(next_l)
+
+
     def dense_ff_layer(self, previous_layer, output_size, nl=tf.nn.tanh, theta = None,g=1.0): #todo organize support for multiple nonlinearities
         if theta is None:
             this_theta = {}
@@ -294,14 +339,14 @@ class Network():
         self.layers[layer_id] = previous_layer * this_theta['scale']
         return self.layers[layer_id]
 
-    def conv2d_layer(self, previous_layer, filters_hwc, nl=tf.nn.relu, theta=None, g=1.0):
+    def conv2d_layer(self, previous_layer, filters_hwc, nl=tf.nn.relu, theta=None, g=1.0,stride=[2,2]):
         if theta is None:
             this_theta = {}
             print('debu:', [np.shape(previous_layer)[1].value,np.shape(previous_layer)[2].value,filters_hwc[2]])
             this_theta['w'] = tf.Variable(
                 tf.random_normal(shape=filters_hwc[:2]+[np.shape(previous_layer)[-1].value,filters_hwc[2]],
                                  mean=0.0,
-                                 stddev=g / np.sqrt(filters_hwc[-1]*filters_hwc[-2])))
+                                 stddev=g / np.sqrt(filters_hwc[-1]*filters_hwc[-2]))) #todo: validate! are the indexes -1,-2 correct?
         else:
             error('explicit theta is still unsupported')
         layer_id=self.get_layer_id()
@@ -309,7 +354,7 @@ class Network():
         self.layers[layer_id] =  tf.nn.conv2d(
                 previous_layer,
                 this_theta['w'],
-                [1,2,2,1], #todo: generalize
+                [1]+stride+[1], #todo: generalize
                 "SAME"
         )
 

@@ -25,10 +25,10 @@ hp.mem_depth = 1
 hp.max_episode = 1000
 hp.steps_per_episode = 1000
 hp.steps_between_learnings = 100
-hp.steps_before_learning_begins = 10000
+hp.steps_before_learning_begins = 100
 hp.fading_mem = 0.0
 hp.tau_int=1e2
-
+hp.num_images = 200
 recorder_file = 'records.pkl'
 hp_file = 'hp.pkl'
 hp.contrast_range = [1.0,1.1]
@@ -97,7 +97,7 @@ def run_env():
                 RL.learn()
             if step%1000 ==0:
                 print(episode,step,' running reward   ',running_ave_reward)
-                print('frame:', scene.current_frame,)
+                print('frame:', scene.current_frame,'  entropy:', ent)
                 if running_ave_reward[0] > best_thus_far:
                     best_thus_far = running_ave_reward[0]
                     RL.dqn.save_nwk_param(hp.this_run_path+'best_liron.nwk')
@@ -122,7 +122,9 @@ if __name__ == "__main__":
     #     if ii%2:
     #         images[ii]=-image+np.max(image)
     # images = prep_mnist_sparse_images(400,images_per_scene=20)
-    images = read_images_from_path('/home/bnapp/arivkindNet/video_datasets/stills_from_videos/some100img_from20bn/*',max_image=10)
+    images = read_images_from_path('/home/bnapp/arivkindNet/video_datasets/stills_from_videos/some100img_from20bn/*',max_image=hp.num_images)
+    # images = read_images_from_path('/home/labs/ahissarlab/arivkind/video_datasets/stills_from_videos/some100img_from20bn/*',max_image=hp.num_images)
+
     # images = [images[1]]
     # images = [np.sum(1.0*uu, axis=2) for uu in images]
     # images = [cv2.resize(uu, dsize=(256, 256-64), interpolation=cv2.INTER_AREA) for uu in images]
@@ -159,6 +161,7 @@ if __name__ == "__main__":
                       state_table=np.zeros([1,observation_size*hp.mem_depth]),
                       soft_q_type='boltzmann',
                       beta=0.1,
+                      beta_schedule=[[4000, 0.1], [7000, 1.0]],
                       arch='conv_ctrl_fade_v1',
                       train_starting_from_layer=None
                       )
