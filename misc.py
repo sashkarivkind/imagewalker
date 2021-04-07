@@ -16,7 +16,11 @@ class HP:
         for att in attributes:
            self.__dict__[att] = copy.copy(temp_hp.__dict__[att])
     def upadte_with_defaults(self,att={},default_att={}):
-        self.__dict__ = {kk:(att[kk] if kk in att.keys() else default_att[kk]) for kk in default_att.keys()}
+        for kk in default_att.keys():
+            self.__dict__[kk] = att[kk] if kk in att.keys() else default_att[kk]
+    def upadte_from_dict(self,att={}):
+        for kk in att.keys():
+            self.__dict__[kk] = att[kk]
 
 class Logger:
     def __init__(self,log_name):
@@ -153,21 +157,25 @@ def read_images_from_path(path = None, filenames = None, max_image=1e7):
     return images
 
 
-def read_random_image_from_path(path = None, grayscale=False, padding=None):
+def read_random_image_from_path(path = None, grayscale=False, padding=None,resize=None):
     filenames = sorted(glob.glob(path))
     filename=filenames[np.random.randint(len(filenames))]
     image=1.0* plt.imread(filename)#todo: doublecheck the scaling (may be x255 needed)
     if grayscale:
         if len(image.shape)==3:
             image=np.mean(image,axis=2)
+    if resize is not None:
+        image = cv2.resize(image,(int(image.shape[1]*resize),int(image.shape[0]*resize)))
     if padding is not None:
         image = add_padding(image,padding)
     return image,filename
 
 def add_padding(image,padding):
-    shp=image.shape
-    new_image = np.zeros(np.array(shp)+2*np.array(padding))
-    new_image[padding[0]:padding[0]+shp[0],padding[1]:padding[1]+shp[1]] = image
+    shp = np.array(image.shape)
+    new_shp = shp + 0
+    new_shp[:2] = new_shp[:2] + 2 * np.array(padding)
+    new_image = np.zeros(new_shp)
+    new_image[padding[0]:padding[0] + shp[0], padding[1]:padding[1] + shp[1]] = image
     return new_image
 
 def relu_up_and_down(x,downsample_fun = lambda x: x):
@@ -244,5 +252,13 @@ def undistort_q_poly(dq,w,cm=None, epsilon=1e-9): #undistort from fisheye, using
     xynew = xy *(rnew / (r+epsilon))[..., np.newaxis]
     dqnew = xynew + cm
     return dqnew
+
+def cifar_shape_fun(x,grayscale=False,normalize=True):
+    o=x.reshape([-1,3,32,32]).transpose([0,2,3,1])
+    if grayscale:
+        o = o.mean(axis=3)[...,np.newaxis]
+    if normalize:
+        o = o/256.
+    return o
 
 

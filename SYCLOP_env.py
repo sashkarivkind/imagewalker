@@ -21,7 +21,7 @@ class Scene():
             self.frame_list = frame_list
             self.total_frames = len(self.frame_list)
             self.image = self.frame_list[self.current_frame]
-        self.maxy, self.maxx = np.shape(self.image)
+        self.maxy, self.maxx = np.shape(self.image)[:2]
         self.hp = HP()
 
     def edge_image_x(self,edge_location,contrast=1.0):
@@ -46,6 +46,7 @@ class Sensor():
         defaults.fading_mem = fading_mem
         defaults.fisheye = fisheye
         defaults.resolution_fun = None
+        defaults.nchannels = None
 
         self.hp = HP()
         self.log_mode = log_mode
@@ -61,7 +62,7 @@ class Sensor():
         self.reset()
 
     def reset(self):
-        self.frame_view = np.zeros([self.hp.winy,self.hp.winx])
+        self.frame_view = np.zeros([self.hp.winy,self.hp.winx]+([] if self.hp.nchannels is None else [self.hp.nchannels]))
         self.central_frame_view = self.frame_view[self.cwy1:self.cwy2,self.cwx1:self.cwx2]
         self.dvs_view =self.dvs_fun(self.frame_view, self.frame_view)
         self.central_dvs_view =self.dvs_view[self.cwy1:self.cwy2,self.cwx1:self.cwx2]

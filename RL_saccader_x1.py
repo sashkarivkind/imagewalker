@@ -168,7 +168,7 @@ class DeepQNetwork:
         if discard_black_areas:
             shp = actions_value.shape
             actions_value = actions_value - np.min(actions_value) #ensure actions are non-negative
-            actions_value = (actions_value.reshape(black_area.shape)*black_area).reshape(shp) #null values at black areas
+            actions_value = (actions_value.reshape(black_area.shape[:2])*black_area).reshape(shp) #null values at black areas, black area is 2D even in case of a color (3D) image
         # self.current_val=np.max(actions_value) #todo debud
         # self.delta_val=np.max(actions_value)-np.min(actions_value) #todo debud
         # print('debug saccader',actions_value.reshape([64,64]))
