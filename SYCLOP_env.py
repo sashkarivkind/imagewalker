@@ -47,6 +47,7 @@ class Sensor():
         defaults.memorize_polarity = False #not in use
         defaults.fisheye = fisheye
         defaults.resolution_fun = None
+        defaults.resolution_fun_type = 'down_and_up'
         defaults.nchannels = None
 
         self.hp = HP()
@@ -54,16 +55,22 @@ class Sensor():
         self.log_floor = log_floor
         self.hp.upadte_with_defaults(att=kwargs, default_att=defaults.__dict__)
 
-
-        self.cwx1 = (self.hp.winx-self.hp.centralwinx)//2
-        self.cwy1 = (self.hp.winy-self.hp.centralwiny)//2
-        self.cwx2 = self.cwx1 + self.hp.centralwinx
-        self.cwy2 = self.cwy1 + self.hp.centralwiny
         self.frame_size = self.hp.winx * self.hp.winy
         self.reset()
 
+
+
     def reset(self):
         self.frame_view = np.zeros([self.hp.winy,self.hp.winx]+([] if self.hp.nchannels is None else [self.hp.nchannels]))
+        if self.hp.resolution_fun_type == 'down':
+            self.frame_view = self.hp.resolution_fun(self.frame_view)
+
+        framey=self.frame_view.shape[0]
+        framex=self.frame_view.shape[1]
+        self.cwx1 = (framex-self.hp.centralwinx)//2
+        self.cwy1 = (framey-self.hp.centralwiny)//2
+        self.cwx2 = self.cwx1 + self.hp.centralwinx
+        self.cwy2 = self.cwy1 + self.hp.centralwiny
         # if self.hp.resolution_fun is not None:
         #     self.frame_view=self.hp.resolution_fun(self.frame_view)
         # print(  'debug1', np.shape(self.frame_view))

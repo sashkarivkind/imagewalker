@@ -13,7 +13,7 @@ import cv2
 import argparse
 
 import tensorflow.keras as keras
-from keras_networks import rnn_model_101
+from keras_networks import rnn_model_101,rnn_model_102
 
 
 def deploy_logs():
@@ -43,11 +43,10 @@ def local_observer(sensor,agent):
             relu_up_and_down(cv2.resize(1.0*sensor.dvs_view, dsize=(16, 16), interpolation=cv2.INTER_AREA))])
 #Define function for low resolution lens on syclop
 
-def bad_res101(img,res):
+def bad_res102(img,res):
     sh=np.shape(img)
     dwnsmp=cv2.resize(img,res, interpolation = cv2.INTER_CUBIC)
-    upsmp = cv2.resize(dwnsmp,sh, interpolation = cv2.INTER_CUBIC)
-    return upsmp
+    return dwnsmp
 
 def prep_singeltons_for_feed(items):
     items_=[]
@@ -95,6 +94,12 @@ def run_env(eval_mode=False,return_actions=False,return_positions=False,forced_a
         sensor.reset()
         sensor.update(scene, agent)
         sensor.update(scene, agent)
+        # print('----------------debug-----------------')
+        # print(sensor.dvs_view.shape)
+        # print(sensor.frame_view.shape)
+        # print(sensor.central_dvs_view.shape)
+        # print(sensor.central_frame_view.shape)
+        # print('--------------------------------------')
         for step_prime in range(hp.steps_per_episode):
 
             if hp.decode_from_dvs:
@@ -309,13 +314,17 @@ if __name__ == "__main__":
     img = build_mnist_padded(1. / 256 * np.reshape(images[0], [1, 28, 28])) #just to initialize scene with correct size
 
     scene = syc.Scene(image_matrix=img)
-    sensor = syc.Sensor(winx=56, winy=56, centralwinx=28, centralwiny=28)
-    sensor.hp.resolution_fun = lambda x: bad_res101(x, (hp.resolution, hp.resolution))
+    sensor = syc.Sensor(winx=56, winy=56,
+                        centralwinx=hp.resolution//2,
+                        centralwiny=hp.resolution//2,
+                        resolution_fun=lambda x: bad_res102(x, (hp.resolution, hp.resolution)),
+                        resolution_fun_type='down')
+    # sensor.hp.resolution_fun = lambda x: bad_res101(x, (hp.resolution, hp.resolution))
     agent = syc.Agent(max_q=[scene.maxx - sensor.hp.winx, scene.maxy - sensor.hp.winy])
 
     reward = syc.Rewards(reward_types=['central_rms_intensity', 'speed','manual_reward'],relative_weights=[hp.intensity_reward,hp.speed_reward,hp.loss_reward])
     # observation_size = sensor.hp.winx*sensor.hp.winy*2
-    observation_size = 2080
+    observation_size = 530#2*(hp.resolution//2)**2+2
 
     rising_beta_schedule = [[hp.beta_t1 // hp.steps_between_learnings, hp.beta_b1], [hp.beta_t2 // hp.steps_between_learnings, hp.beta_b2]]
     flat_beta_schedule = [[hp.beta_t1 // hp.steps_between_learnings, hp.beta_b2], [hp.beta_t2 // hp.steps_between_learnings, hp.beta_b2]]
@@ -339,7 +348,8 @@ if __name__ == "__main__":
                       arch='mlp')
     keras.backend.set_session(RL.dqn.sess)
     if hp.decoder_initial_network is None:
-        decoder = rnn_model_101(lr=hp.decoder_learning_rate,ignore_input_B=hp.decoder_ignore_position,dropout=hp.decoder_dropout,rnn_type=hp.decoder_rnn_type)
+        decoder = rnn_model_102(lr=hp.decoder_learning_rate,ignore_input_B=hp.decoder_ignore_position,dropout=hp.decoder_dropout,rnn_type=hp.decoder_rnn_type,
+                                input_size=(hp.resolution//2,hp.resolution//2, 1))
     else:
         decoder = keras.models.load_model(hp.decoder_initial_network) #for example: 'ref_nets/keras_decoder_5stp_101.model'
         keras.backend.set_value(decoder.optimizer.lr, hp.decoder_learning_rate)
