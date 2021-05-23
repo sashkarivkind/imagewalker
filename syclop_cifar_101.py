@@ -69,11 +69,11 @@ simple_rnn_accuracy = []
 rnn_accuracy = []
 cnn_accuracy = []
 
-res_list = [25,15,10,8,6,5,4,3,2]
+res_list = [25,10,8]
 
 for res in res_list:
     print('############################################## RES = {} #############################################'.format(res))
-    train_dataset, test_dataset = create_dataset(images, labels,res = res,return_datasets=True, mixed_state = False, add_seed = 0)
+    train_dataset, test_dataset = create_cifar_dataset(images, labels,res = res,return_datasets=True, mixed_state = False, add_seed = 0)
     train_dataset_x, train_dataset_y = split_dataset_xy(train_dataset)
     test_dataset_x, test_dataset_y = split_dataset_xy(test_dataset)
     
@@ -93,7 +93,7 @@ for res in res_list:
     # simple_rnn_memory[res] = simple_rnn_history.history['val_sparse_categorical_accuracy']
     # simple_rnn_accuracy.append(max(simple_rnn_history.history['val_sparse_categorical_accuracy']))
     print("####################### Fit RNN and trajectories model on training data ##############################")
-    rnn_net = rnn_model()
+    rnn_net = rnn_model(input_size = 32)
     rnn_history = rnn_net.fit(
         train_dataset_x,
         train_dataset_y,
@@ -105,10 +105,11 @@ for res in res_list:
         validation_data=(test_dataset_x, test_dataset_y),
         verbose = 0) #(validation_images, validation_labels)
     print('################# Trajectories RNN Combined Validation Accuracy = ',rnn_history.history['val_sparse_categorical_accuracy'])
+    print('################# Trajectories RNN Combined Train Accuracy = ',rnn_history.history['sparse_categorical_accuracy'])
     rnn_memory[res] = rnn_history.history['val_sparse_categorical_accuracy']
     rnn_accuracy.append(max(rnn_history.history['val_sparse_categorical_accuracy']))
     print("####################### Fit CNN and trajectories model on training data ##############################")
-    cnn_net = cnn_model()
+    cnn_net = cnn_one_img(input_size = 32)
     cnn_history = cnn_net.fit(
         train_dataset_x,
         train_dataset_y,
@@ -117,6 +118,7 @@ for res in res_list:
         validation_data = (test_dataset_x, test_dataset_y),
         verbose = 0)
     print('################# CNN Validation Accuracy = ',cnn_history.history['val_sparse_categorical_accuracy'])
+    print('################# CNN Train Accuracy = ',cnn_history.history['sparse_categorical_accuracy'])
     cnn_memory[res] = cnn_history.history['val_sparse_categorical_accuracy']
     cnn_accuracy.append(max(cnn_history.history['val_sparse_categorical_accuracy']))
    

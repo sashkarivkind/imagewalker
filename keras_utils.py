@@ -34,9 +34,15 @@ def bad_res101(img,res):
     upsmp = cv2.resize(dwnsmp,sh[:2], interpolation = cv2.INTER_CUBIC)
     return upsmp
 
+def bad_res102(img,res):
+    sh=np.shape(img)
+    dwnsmp=cv2.resize(img,res, interpolation = cv2.INTER_CUBIC)
+    return dwnsmp
+
 #The Dataset formation
 def create_mnist_dataset(images, labels, res, sample = 5, mixed_state = True, add_traject = True,
-                   trajectory_list=None,return_datasets=False, add_seed = 20, show_fig = False):
+                   trajectory_list=None,return_datasets=False, add_seed = 20, show_fig = False,
+                   mix_res = False, bed_res_func = bad_res102, up_sample = False):
     '''
     Creates a torch dataloader object of syclop outputs 
     from a list of images and labels.
@@ -51,8 +57,16 @@ def create_mnist_dataset(images, labels, res, sample = 5, mixed_state = True, ad
     trajectory_list : uses a preset trajectory from the list.
     return_datasets: rerutns datasets rather than dataloaders
     add_seed : creates a random seed option to have a limited number of random
-               trajectories, defoult = 20 (number of trajectories)
+               trajectories, default = 20 (number of trajectories)
     show_fig : to show or not an example of the dataset, defoult = False
+    mix_res  : Weather or not to create a mix of resolution in each call to
+                the dataset, to use to learn if the network is able to learn
+                mixed resolution to gain better performance in the lower res 
+                part. default = 
+    bed_res_func : The function that creats the bad resolution images 
+    up_sample    : weather the bad_res_func used up sampling or not, it changes the central view 
+                    values. 
+    
     Returns
     -------
     train_dataloader, test_dataloader - torch DataLoader class objects
@@ -69,10 +83,13 @@ def create_mnist_dataset(images, labels, res, sample = 5, mixed_state = True, ad
         fig, ax = plt.subplots(2,5)
         i = 0 #indexises for the subplot for image and for syclop vision
     for img_num,img in enumerate(images):
+
         if add_seed:
             np.random.seed(random.randint(0,add_seed))        
         
-        orig_img = np.reshape(img,[28,28])
+        if mix_res:
+            res = random.randint(6,26)
+        orig_img = np.reshape(img,[28,28,1])
         #Set the padded image
         img=misc.build_mnist_padded(1./256*np.reshape(img,[1,28,28]))
         if img_num == 42:
@@ -83,7 +100,13 @@ def create_mnist_dataset(images, labels, res, sample = 5, mixed_state = True, ad
                 plt.title(labels[count])
         #Set the sensor and the agent
         scene = syc.Scene(image_matrix=img)
-        sensor = syc.Sensor(winx=56,winy=56,centralwinx=28,centralwiny=28)
+        if up_sample:
+            sensor = syc.Sensor(winx=56,winy=56,centralwinx=28,centralwiny=28,
+                                resolution_fun = lambda x: bed_res_func(x,(res,res)), resolution_fun_type = 'down')
+        else:
+            sensor = syc.Sensor(winx=56,winy=56,centralwinx=3,centralwiny=3,
+                                resolution_fun = lambda x: bed_res_func(x,(res,res)), resolution_fun_type = 'down')
+
         agent = syc.Agent(max_q = [scene.maxx-sensor.hp.winx,scene.maxy-sensor.hp.winy])
         #Setting the coordinates to visit
         if trajectory_list is None:
@@ -102,7 +125,7 @@ def create_mnist_dataset(images, labels, res, sample = 5, mixed_state = True, ad
             q_sequence = np.array(trajectory_list[img_num]).astype(int)
         
         #Setting the resolution function - starting with the regular resolution
-        sensor.hp.resolution_fun = lambda x: bad_res101(x,(res,res))
+        
         #Create empty lists to store the syclops outputs
         imim=[]
         dimim=[]
@@ -241,7 +264,7 @@ def create_cifar_dataset(images, labels, res, sample = 5, mixed_state = True, ad
                 plt.title(labels[count])
         #Set the sensor and the agent
         scene = syc.Scene(image_matrix=img)
-        sensor = syc.Sensor(winx=56,winy=56,centralwinx=32,centralwiny=32,nchannels = 3)
+        sensor = syc.Sensor(winx=56,winy=56,centralwinx=4,centralwiny=4,nchannels = 3,resolution_fun = lambda x: bad_res102(x,(res,res)), resolution_fun_type = 'down')
         agent = syc.Agent(max_q = [scene.maxx-sensor.hp.winx,scene.maxy-sensor.hp.winy])
         #Setting the coordinates to visit
         if trajectory_list is None:
@@ -260,8 +283,6 @@ def create_cifar_dataset(images, labels, res, sample = 5, mixed_state = True, ad
             q_sequence = np.array(trajectory_list[img_num]).astype(int)
         if count == 0 :
             print(q_sequence.shape)
-        #Setting the resolution function - starting with the regular resolution
-        sensor.hp.resolution_fun = lambda x: bad_res101(x,(res,res))
         #Create empty lists to store the syclops outputs
         imim=[]
         dimim=[]
@@ -353,6 +374,12 @@ def create_cifar_dataset(images, labels, res, sample = 5, mixed_state = True, ad
     if return_datasets:
         return train_dataset, test_dataset
 
+def mnist_split_dataset_xy(dataset):
+    n_timesteps = 5
+    dataset_x1 = [uu[0] for uu in dataset]
+    dataset_x2 = [uu[1] for uu in dataset]
+    dataset_y = [uu[-1] for uu in dataset]
+    return (np.array(dataset_x1)[...,np.newaxis],np.array(dataset_x2)[:,:n_timesteps,:]),np.array(dataset_y)
 
 ##############################################################################
 ############################### KERAS NETWORKS ###############################
@@ -592,7 +619,7 @@ def rnn_model_concat_same_length(n_timesteps = 5, gru_size = 128):
     model.compile(
         optimizer=opt,
         loss="sparse_categorical_crossentropy",
-        metrics=["sparse_categorical_accuracy"],
+        metrics=["sparse_categorical_accuracy"]
     )
     return model
     
@@ -643,7 +670,6 @@ def cnn_one_img(n_timesteps = 5, input_size = 28):
     x1=keras.layers.Conv2D(16,(3,3),activation='relu')(inputA[:,0,:,:,:])
     x1=keras.layers.BatchNormalization()(x1)
     x1=keras.layers.MaxPooling2D(pool_size=(2, 2))(x1)
-
     x1=keras.layers.Conv2D(32,(3,3),activation='relu')(x1)
     x1=keras.layers.BatchNormalization()(x1)
     x1=keras.layers.MaxPooling2D(pool_size=(2, 2))(x1)
@@ -750,7 +776,7 @@ def low_features_rnn_model(n_timesteps = 5, cell_size = 128, input_size = 32, co
     x1=keras.layers.TimeDistributed(keras.layers.MaxPooling2D(pool_size=(2, 2)))(x1)
 
     x1=keras.layers.TimeDistributed(keras.layers.Conv2D(32,(3,3),activation='relu'))(x1)
-    x1=keras.layers.TimeDistributed(keras.layers.BatchNormalization())(x1)
+    x1=keras.layers.TimeDistributed(keras.layers.BatchNormalization(inputA))(x1)
     x1=keras.layers.TimeDistributed(keras.layers.MaxPooling2D(pool_size=(2, 2)))(x1)
 
     x1=keras.layers.TimeDistributed(keras.layers.Conv2D(16,(3,3),activation='relu'))(x1)
@@ -768,6 +794,255 @@ def low_features_rnn_model(n_timesteps = 5, cell_size = 128, input_size = 32, co
     print(x.shape)
     # define LSTM model
     x = keras.layers.GRU(cell_size,input_shape=(n_timesteps, None),return_sequences=False)(x)
+    x = keras.layers.Dense(10,activation="softmax")(x)
+    model = keras.models.Model(inputs=[inputA,inputB],outputs=x, name = 'low_features_rnn_model_{}_{}'.format(concat,low_cat))
+    opt=tf.keras.optimizers.Adam(lr=3e-3)
+
+    model.compile(
+        optimizer=opt,
+        loss="sparse_categorical_crossentropy",
+        metrics=["sparse_categorical_accuracy"],
+    )
+    return model
+
+def extended_low_features_rnn_model(n_timesteps = 5, cell_size = 128, input_size = 32, concat = True, low_cat = False):
+    inputA = keras.layers.Input(shapinputAe=(n_timesteps,input_size,input_size,3))
+    inputB = keras.layers.Input(shape=(n_timesteps,2))
+    
+    h_coor = 0
+    hold_slices = []
+    gru1 = keras.layers.GRU(4*4*16,input_shape=(n_timesteps, None),return_sequences=True)
+    for i in range(8):
+        v_coor =0
+        v_slices = []
+        for j in range(8):
+            slice_ = inputA[:,:,v_coor:v_coor+4,h_coor:h_coor+4,:]
+            slice_ = keras.layers.TimeDistributed(keras.layers.Flatten())(slice_)
+            if low_cat:
+                slice_ = keras.layers.Concatenate()([slice_, inputB])
+            slice_ = gru1(slice_)
+            #print(slice_.shape)
+            slice_ = keras.layers.Reshape((n_timesteps, 4, 4, 16))(slice_)
+            #print(slice_.shape)
+            v_slices.append(slice_)
+            v_coor += 4
+        h_coor += 4
+        hold_slices.append(v_slices)
+    
+    h = []
+    for v_slice in hold_slices:
+        v = keras.layers.Concatenate(axis = 2)(v_slice)
+        #print(v.shape)
+        h.append(v)
+    h = keras.layers.Concatenate(axis = 3)(h)
+    print(h.shape)
+            
+    # define CNN model
+    x1=keras.layers.TimeDistributed(keras.layers.Conv2D(32,(3,3),activation='relu', padding = 'same'))(h)
+    x1=keras.layers.TimeDistributed(keras.layers.Conv2D(32,(3,3),activation='relu', padding = 'same'))(x1)
+    x1=keras.layers.TimeDistributed(keras.layers.MaxPooling2D(pool_size=(2, 2)))(x1)
+    x1=keras.layers.TimeDistributed(keras.layers.Dropout(0.2))(x1)
+
+    x1=keras.layers.TimeDistributed(keras.layers.Conv2D(64,(3,3),activation='relu', padding = 'same'))(x1)
+    x1=keras.layers.TimeDistributed(keras.layers.Conv2D(64,(3,3),activation='relu', padding = 'same'))(x1)
+    x1=keras.layers.TimeDistributed(keras.layers.MaxPooling2D(pool_size=(2, 2)))(x1)
+    x1=keras.layers.TimeDistributed(keras.layers.Dropout(0.2))(x1)
+
+    x1=keras.layers.TimeDistributed(keras.layers.Conv2D(128,(3,3),activation='relu', padding = 'same'))(x1)
+    x1=keras.layers.TimeDistributed(keras.layers.Conv2D(128,(3,3),activation='relu', padding = 'same'))(x1)
+    x1=keras.layers.TimeDistributed(keras.layers.MaxPooling2D(pool_size=(2, 2)))(x1)
+    x1=keras.layers.TimeDistributed(keras.layers.Dropout(0.2))(x1)
+    print(x1.shape)
+
+    # x1=keras.layers.TimeDistributed(keras.layers.MaxPooling2D(pool_size=(2, 2)))(x1)
+    # print(x1.shape)
+ 
+    x1=keras.layers.TimeDistributed(keras.layers.Flatten())(x1)
+    print(x1.shape)
+    if concat:
+        x = keras.layers.Concatenate()([x1,inputB])
+    else:
+        x = x1
+    print(x.shape)
+    # define LSTM model
+    x = keras.layers.GRU(cell_size,input_shape=(n_timesteps, None),return_sequences=False)(x)
+    x = keras.layers.Dense(10,activation="softmax")(x)
+    model = keras.models.Model(inputs=[inputA,inputB],outputs=x, name = 'extended_low_features_rnn_model_{}_{}'.format(concat,low_cat))
+    opt=tf.keras.optimizers.Adam(lr=3e-3)
+
+    model.compile(
+        optimizer=opt,
+        loss="sparse_categorical_crossentropy",
+        metrics=["sparse_categorical_accuracy"],
+    )
+    return model
+
+def no_cnn(n_timesteps = 5, cell_size = 128, input_size = 28,input_dim = 1, concat = True):
+    inputA = keras.layers.Input(shape=(n_timesteps,input_size,input_size,input_dim))
+    inputB = keras.layers.Input(shape=(n_timesteps,2))
+
+    x1=keras.layers.TimeDistributed(keras.layers.Flatten())(inputA)
+    print(x1.shape)
+    if concat:
+        x = keras.layers.Concatenate()([x1,inputB])
+    else:
+        x = x1
+    print(x.shape)
+    # define LSTM model
+    x = keras.layers.GRU(cell_size,input_shape=(n_timesteps, None),return_sequences=False, recurrent_dropout=0.1)(x)
+    print(x.shape)
+    x = keras.layers.Dense(10,activation="softmax")(x)
+    model = keras.models.Model(inputs=[inputA,inputB],outputs=x, name = 'no_cnn_{}'.format(concat))
+    opt=tf.keras.optimizers.Adam(lr=3e-3)
+
+    model.compile(
+        optimizer=opt,
+        loss="sparse_categorical_crossentropy",
+        metrics=["sparse_categorical_accuracy"],
+    )
+    return model
+
+def no_cnn_dense(n_timesteps = 5, cell_size = 128, input_size = 28,input_dim = 1, concat = True):
+    inputA = keras.layers.Input(shape=(n_timesteps,input_size,input_size,input_dim))
+    inputB = keras.layers.Input(shape=(n_timesteps,2))
+
+    x1=keras.layers.TimeDistributed(keras.layers.Flatten())(inputA)
+    print(x1.shape)
+    if concat:
+        x = keras.layers.Concatenate()([x1,inputB])
+    else:
+        x = x1
+    print(x.shape)
+    x = keras.layers.TimeDistributed(keras.layers.Dense(cell_size,activation="relu"))(x)
+    # define LSTM model
+    x = keras.layers.GRU(cell_size,input_shape=(n_timesteps, None),return_sequences=False, recurrent_dropout=0.1)(x)
+    
+    print(x.shape)
+    x = keras.layers.Dense(10,activation="softmax")(x)
+    model = keras.models.Model(inputs=[inputA,inputB],outputs=x, name = 'no_cnn_dense_{}'.format(concat))
+    opt=tf.keras.optimizers.Adam(lr=3e-3)
+
+    model.compile(
+        optimizer=opt,
+        loss="sparse_categorical_crossentropy",
+        metrics=["sparse_categorical_accuracy"],
+    )
+    return model
+
+def no_cnn_low_features_model(n_timesteps = 5, cell_size = 128, input_size = 32, input_dim = 3,concat = True, low_cat = False):
+    inputA = keras.layers.Input(shape=(n_timesteps,input_size,input_size,input_dim))
+    inputB = keras.layers.Input(shape=(n_timesteps,2))
+    
+    h_coor = 0
+    hold_slices = []
+    gru1 = keras.layers.GRU(4*4*16,input_shape=(n_timesteps, None),return_sequences=True)
+    print(inputA.shape)
+    for i in range(4):
+        v_coor =0
+        v_slices = []
+        for j in range(4):
+            slice_ = inputA[:,:,v_coor:v_coor+1,h_coor:h_coor+1,:]
+            print(v_coor+1)
+            slice_ = keras.layers.TimeDistributed(keras.layers.Flatten())(slice_)
+            if low_cat:
+                slice_ = keras.layers.Concatenate()([slice_, inputB])
+            slice_ = gru1(slice_)
+            #print(slice_.shape)
+            slice_ = keras.layers.Reshape((n_timesteps, 1, 1, 4*4*16))(slice_)
+            #print(slice_.shape)
+            v_slices.append(slice_)
+            v_coor += 1
+        h_coor += 1
+        hold_slices.append(v_slices)
+    
+    h = []
+    for v_slice in hold_slices:
+        v = keras.layers.Concatenate(axis = 2)(v_slice)
+        #print(v.shape)
+        h.append(v)
+    h = keras.layers.Concatenate(axis = 3)(h)
+    print('h shape:', h.shape)
+            
+    x1=keras.layers.TimeDistributed(keras.layers.Flatten())(h)
+    print(x1.shape)
+    if concat:
+        x = keras.layers.Concatenate()([x1,inputB])
+    else:
+        x = x1
+    print('x',x.shape)
+    x = keras.layers.TimeDistributed(keras.layers.Dense(cell_size,activation="relu"))(x)
+    # define GRU model
+    x = keras.layers.GRU(cell_size,input_shape=(n_timesteps, None),return_sequences=False, recurrent_dropout=0.2)(x)
+    
+    x = keras.layers.Dense(10,activation="softmax")(x)
+    model = keras.models.Model(inputs=[inputA,inputB],outputs=x, name = 'low_features_rnn_model_{}_{}'.format(concat,low_cat))
+    opt=tf.keras.optimizers.Adam(lr=3e-3)
+
+    model.compile(
+        optimizer=opt,
+        loss="sparse_categorical_crossentropy",
+        metrics=["sparse_categorical_accuracy"],
+    )
+    return model
+
+def low_features_middle_cnn_model(n_timesteps = 5, cell_size = 128, input_size = 32, input_dim = 3,concat = True, low_cat = False):
+    '''
+    concat = True, low_cat = False GRU cell = 4*4*16 dropout_cnn = 0.2, dropout_rnn = 0.2 RESULTS = 57 train 54 val
+    
+    
+    '''
+    inputA = keras.layers.Input(shape=(n_timesteps,input_size,input_size,input_dim))
+    inputB = keras.layers.Input(shape=(n_timesteps,2))
+    
+    h_coor = 0
+    hold_slices = []
+    gru1 = keras.layers.GRU(4*4*16,input_shape=(n_timesteps, None),return_sequences=True)
+    print(inputA.shape)
+    for i in range(4):
+        v_coor =0
+        v_slices = []
+        for j in range(4):
+            slice_ = inputA[:,:,v_coor:v_coor+1,h_coor:h_coor+1,:]
+            slice_ = keras.layers.TimeDistributed(keras.layers.Flatten())(slice_)
+            if low_cat:
+                slice_ = keras.layers.Concatenate()([slice_, inputB])
+            slice_ = gru1(slice_)
+            #print(slice_.shape)
+            slice_ = keras.layers.Reshape((n_timesteps, 1, 1, 4*4*16))(slice_)
+            #print(slice_.shape)
+            v_slices.append(slice_)
+            v_coor += 1
+        h_coor += 1
+        hold_slices.append(v_slices)
+    
+    h = []
+    for v_slice in hold_slices:
+        v = keras.layers.Concatenate(axis = 2)(v_slice)
+        #print(v.shape)
+        h.append(v)
+    h = keras.layers.Concatenate(axis = 3)(h)
+    print('h shape:', h.shape)
+    
+    # define CNN model
+    x1=keras.layers.TimeDistributed(keras.layers.Conv2D(128,(3,3),activation='relu', padding = 'same'))(h)
+    x1=keras.layers.TimeDistributed(keras.layers.Dropout(0.2))(x1)
+
+    x1=keras.layers.TimeDistributed(keras.layers.Conv2D(128,(3,3),activation='relu', padding = 'same'))(x1)
+    x1=keras.layers.TimeDistributed(keras.layers.Dropout(0.2))(x1)
+
+    x1=keras.layers.TimeDistributed(keras.layers.Conv2D(64,(3,3),activation='relu', padding = 'same'))(x1)
+    print(x1.shape)
+    x1=keras.layers.TimeDistributed(keras.layers.Flatten())(x1)
+    print(x1.shape)
+    if concat:
+        x = keras.layers.Concatenate()([x1,inputB])
+    else:
+        x = x1
+    print('x',x.shape)
+    x = keras.layers.TimeDistributed(keras.layers.Dense(cell_size,activation="relu"))(x)
+    # define GRU model
+    x = keras.layers.GRU(cell_size,input_shape=(n_timesteps, None),return_sequences=False, recurrent_dropout=0.2)(x)
+    
     x = keras.layers.Dense(10,activation="softmax")(x)
     model = keras.models.Model(inputs=[inputA,inputB],outputs=x, name = 'low_features_rnn_model_{}_{}'.format(concat,low_cat))
     opt=tf.keras.optimizers.Adam(lr=3e-3)

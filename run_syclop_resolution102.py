@@ -81,7 +81,7 @@ def run_env(eval_mode=False,return_actions=False,return_positions=False,forced_a
             elif forced_positions is not None:
                 pass
             else:
-                action, ent = RL.choose_action(observation.reshape([-1]))
+                action, ent = RLHP.choose_action(observation.reshape([-1]))
             if return_actions:
                 episode_action_rec.append(action)
             if return_positions:
