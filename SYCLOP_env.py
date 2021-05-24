@@ -53,6 +53,9 @@ class Sensor():
         self.log_floor = log_floor
         self.hp.upadte_with_defaults(att=kwargs, default_att=defaults.__dict__)
 
+        self.eclamp_evnt_cnt = 100
+        self.eclamp_substep_r = 1
+        self.eclamp_max_substeps = 20
 
         self.cwx1 = (self.hp.winx-self.hp.centralwinx)//2
         self.cwy1 = (self.hp.winy-self.hp.centralwiny)//2
@@ -96,6 +99,36 @@ class Sensor():
         if self.hp.resolution_fun is not None:
             view = self.hp.resolution_fun(view)
         return view
+    
+    # events clamp
+    def eclamp_step(self, scene, agent, phi):
+        q0 = agent.q
+        view0 = self.get_view(scene, agent)
+        view0_cw = view0[self.cwy1:self.cwy2,self.cwx1:self.cwx2]
+                        
+        evnt_cnt = 0
+        substeps = 0
+        q1_ana = q0;
+        while evnt_cnt < self.eclamp_evnt_cnt and substeps < self.eclamp_max_substeps:
+                        
+            q1_ana = q1_ana + self.eclamp_substep_r*[np.cos(phi),np.sin(phi)]
+            q1_ana = np.minimum(q1_ana,agent.max_q) # enforce_bounderies ??
+            q1_ana = np.maximum(q1_ana,[0.0, 0.0])
+            q1 = np.int32(np.floor(q1_ana))
+            
+            if (q1 != q0).any():
+                agent.set_manual_q(q1)
+    #             self.update(scene,agent)
+                view1 = self.get_view(scene,agent)
+                view1_cw = view1[self.cwy1:self.cwy2,self.cwx1:self.cwx2]
+                dvs_view = self.dvs_fun(view1_cw, view0_cw)
+                evnt_cnt = np.sum(np.abs(dvs_view))
+
+            substeps+=1
+            
+#         print(substeps)    
+        return q1, substeps
+
 
 class Agent():
     def __init__(self,max_q = None):
@@ -124,12 +157,12 @@ class Agent():
     def set_manual_trajectory(self,manual_q_sequence,manual_t=0):
         self.manual_q_sequence = manual_q_sequence
         self.manual_t = manual_t
-
+        
     def manual_act(self):
         self.q = self.manual_q_sequence[self.manual_t]
         self.manual_t += 1
         self.manual_t %= len(self.manual_q_sequence)
-
+        
     def act(self,a):
         if a is None:
             action = 'null'
@@ -215,7 +248,7 @@ class Agent():
             pass
         else:
             error('unknown action')
-
+            
 class Rewards():
     def __init__(self,reward_types=['central_rms_intensity'],relative_weights=[1.0]):
         self.reward_obj_list = []
