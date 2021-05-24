@@ -49,7 +49,7 @@ def saccade_observer(sensor,drift_observation):
 def drift_state_for_saccade_observation(current_state, integrator_state):
     return integrator_state
 
-def drift_state_for_integrator(drift_net_state, abs_en=False,layer=3):
+def drift_state_for_integrator(drift_net_state, abs_en=False,layer=5):
     if abs_en:
         return np.abs(drift_net_state[layer])
     else:
@@ -118,7 +118,7 @@ def run_env(eval_mode=False):
             tlist[6] = time.time()
             saccade_action, ent = saccade_RL.choose_action(saccade_observation.reshape([-1]),
                                                        discard_black_areas=True,
-                                                       black_area=(sensor.frame_view>1e-9))
+                                                       black_area=(sensor.frame_view.max(axis=2)>1e-9))
             reward_and_rewards = np.array(
                 [reward.reward] + reward.rewards.tolist())
             running_ave_reward = 0.999 * running_ave_reward + 0.001 * reward_and_rewards
@@ -197,7 +197,7 @@ if __name__ == "__main__":
     hp_file = 'hp.pkl'
     hp.drift_state_size = 200
     hp.dqn_initial_network = None  # 'saved_runs/run_syclop_generic_cnn_vfb_neu.py_noname_1590422112_0/tempX_1.nwk'  # None #'saved_runs/run_syclop_generic_cnn_vfb_neu.py_noname_1589383850_0/tempX_1.nwk'
-    hp.drift_initial_network = 'ref_nets/cifar_nwk_102.pkl'  # 'ref_nets/drift_net_sf40_ae2//trained.nwk' #'ref_nets/drift_net1/trained.nwk'
+    hp.drift_initial_network = 'cifar_net_temp_save.nwk'  # 'ref_nets/drift_net_sf40_ae2//trained.nwk' #'ref_nets/drift_net1/trained.nwk'
     hp.drift_net_abs_en = False
     hp.eval_mode = False
     hp.eval_dirs = []
@@ -225,7 +225,8 @@ if __name__ == "__main__":
     recorder = Recorder(n=6)
 
 
-    sensor = syc.Sensor( fisheye=fy_dict,centralwinx=32,centralwiny=32)
+    sensor = syc.Sensor( fisheye=fy_dict,centralwinx=32,centralwiny=32,nchannels=nchannels)
+
     saccade_agent = syc.Saccadic_Agent()
 
     reward = syc.Rewards(reward_types=['network'],relative_weights=[100.0])
@@ -236,15 +237,18 @@ if __name__ == "__main__":
         visual_features = 64*64*3
     saccade_observation_size = visual_features+hp.drift_state_size
 
+    n_features_shaped = list(np.shape(sensor.dvs_view))
     if len(n_features_shaped) < 3:  # to support 2 and 3d dvs views
         n_features_shaped.append(nchannels)
+    print('debu nchannels',nchannels)
+    print('debu n_feature_shaped',n_features_shaped)
     # saccade_RL = DeepQNetwork(np.prod(saccade_agent.max_q), saccade_observation_size,
-    saccade_RL = DeepQNetwork(visual_features, saccade_observation_size,
+    saccade_RL = DeepQNetwork(64*64, saccade_observation_size,
                               n_features_shaped=n_features_shaped,
                       shape_fun= None,
                       reward_decay=0.99,
                       replace_target_iter=10,
-                      memory_size=100000,
+                      memory_size=10000,
                       e_greedy_increment=0.0001,
                       learning_rate=0.0025,
                       double_q=True,
@@ -257,12 +261,13 @@ if __name__ == "__main__":
     # at this point drift network is a standalone network taken from some external source (e.g. pretrained)
     # in future it will be an action generating network from the drift loop
     # drift_net = Stand_alone_net(16*16,10,arch='mlp', layer_size = [None]+[100]+[100]+[ None])
-    drift_net = Stand_alone_net([32,32,nchannels],10,arch='conv',
-                                    layer_size = [None]+[[3,3,32]]+[[2,2,16]]+[200]+[ None],
-                                    loss_type='softmax_cross_entropy',
-                                    trainable=True,
-                                    lr=0.0005,
-                                    lambda_reg=0.0) #simple cifar10 classifier
+    drift_net = Stand_alone_net([32, 32, 3], 10, arch='conv',
+                                layer_size=[None] + [[5, 5, 96], [5, 5, 80], [5, 5, 64], [5, 5, 64]] + [200] + [None],
+                                loss_type='softmax_cross_entropy',
+                                trainable=True,
+                                lr=1,
+                                dropout_p_keep=0.99,
+                                lambda_reg=0.0)
     drift_net.assign_session_to_nwk(saccade_RL.dqn.sess)
     saccade_RL.dqn.sess.run(tf.global_variables_initializer())
     saccade_RL.dqn.reset()

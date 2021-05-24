@@ -44,8 +44,10 @@ class Sensor():
         defaults.centralwinx = 4*4
         defaults.centralwiny = 4*4
         defaults.fading_mem = fading_mem
+        defaults.memorize_polarity = False #not in use
         defaults.fisheye = fisheye
         defaults.resolution_fun = None
+        defaults.resolution_fun_type = 'down_and_up'
         defaults.nchannels = None
 
         self.hp = HP()
@@ -57,16 +59,33 @@ class Sensor():
         self.eclamp_substep_r = 1
         self.eclamp_max_substeps = 20
 
-        self.cwx1 = (self.hp.winx-self.hp.centralwinx)//2
-        self.cwy1 = (self.hp.winy-self.hp.centralwiny)//2
-        self.cwx2 = self.cwx1 + self.hp.centralwinx
-        self.cwy2 = self.cwy1 + self.hp.centralwiny
+#         self.cwx1 = (self.hp.winx-self.hp.centralwinx)//2
+#         self.cwy1 = (self.hp.winy-self.hp.centralwiny)//2
+#         self.cwx2 = self.cwx1 + self.hp.centralwinx
+#         self.cwy2 = self.cwy1 + self.hp.centralwiny
+
         self.frame_size = self.hp.winx * self.hp.winy
         self.reset()
 
+
+
     def reset(self):
         self.frame_view = np.zeros([self.hp.winy,self.hp.winx]+([] if self.hp.nchannels is None else [self.hp.nchannels]))
+        if self.hp.resolution_fun_type == 'down':
+            self.frame_view = self.hp.resolution_fun(self.frame_view)
+
+        framey=self.frame_view.shape[0]
+        framex=self.frame_view.shape[1]
+        self.cwx1 = (framex-self.hp.centralwinx)//2
+        self.cwy1 = (framey-self.hp.centralwiny)//2
+        self.cwx2 = self.cwx1 + self.hp.centralwinx
+        self.cwy2 = self.cwy1 + self.hp.centralwiny
+        # if self.hp.resolution_fun is not None:
+        #     self.frame_view=self.hp.resolution_fun(self.frame_view)
+        # print(  'debug1', np.shape(self.frame_view))
         self.central_frame_view = self.frame_view[self.cwy1:self.cwy2,self.cwx1:self.cwx2]
+        # print(  'debug2', np.shape(self.central_frame_view))
+
         self.dvs_view =self.dvs_fun(self.frame_view, self.frame_view)
         self.central_dvs_view =self.dvs_view[self.cwy1:self.cwy2,self.cwx1:self.cwx2]
 
@@ -145,8 +164,13 @@ class Agent():
         self.saccade_flag = False
         self.reset()
 
-    def reset(self):
-        self.q_ana = np.array([np.random.randint(self.max_q[0]), np.random.randint(self.max_q[1])], dtype='f')
+    def reset(self, centered=False, q_init=None):
+        if q_init is not None:
+            self.q_ana=q_init+0.
+        elif centered:
+            self.q_ana = np.array(self.max_q)/2.
+        else:
+            self.q_ana = np.array([np.random.randint(self.max_q[0]), np.random.randint(self.max_q[1])], dtype='f')
         self.qdot = np.array([0.0,0.0])
         self.qdotdot = np.array([0.0,0.0])
         self.q = np.int32(np.floor(self.q_ana))
@@ -288,14 +312,16 @@ class Rewards():
                 this_reward = self.Network_L1_intensity_reward()
             elif reward_type == 'network_binary_activity':
                 this_reward = self.Network_binary_activity_reward()
+            elif reward_type == 'manual_reward':
+                this_reward = self.Manual_reward()
             else:
                 error('unknown reward')
             self.reward_obj_list.append(this_reward)
             self.hp.reward_hp[reward_type] = this_reward.hp
 
-    def update_rewards(self, sensor=None, agent=None, network=None):
+    def update_rewards(self, sensor=None, agent=None, network=None, **kwargs):
         for ii,this_reward in enumerate(self.reward_obj_list):
-            this_reward.update(sensor = sensor,agent = agent, network = network)
+            this_reward.update(sensor=sensor,agent=agent, network=network, **kwargs)
             self.rewards[ii] = this_reward.reward
         self.reward = np.sum(self.hp.relative_weights*self.rewards)
 
@@ -438,6 +464,12 @@ class Rewards():
             network=kwargs['network']
             self.reward = np.mean(network>self.hp.epsilon)
 
+    class Manual_reward():  # just
+        def __init__(self):
+            self.hp = HP()
+
+        def update(self, sensor=None, agent=None, **kwargs):
+            self.reward =kwargs['manual_reward']
 
 class Saccadic_Agent():
     # a very simple object, taylored for saccade action

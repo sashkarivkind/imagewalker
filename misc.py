@@ -211,6 +211,13 @@ def build_mnist_padded(image,xx=128,yy=128,y_size=28,x_size=28,offset=(0,0)):
     xys = [((xx-x_size)//2+offset[0],(yy-y_size)//2+offset[1])]
     return pack_scene(image,xys,xx=xx,yy=yy,y_size=y_size,x_size=y_size)
 
+def build_cifar_padded(image,pad_size = 100, xx=132,yy=132,y_size=32,x_size=32,offset=(0,0)):
+    #todo: double-check x-y vs. row-column convention
+    #prepares an mnist image padded with zeros everywhere around it, written in a somewhat strange way to resuse other availiable functions
+    
+    image = cv2.copyMakeBorder( image, pad_size, pad_size, pad_size, pad_size, cv2.BORDER_CONSTANT)
+    return image
+
 def prep_mnist_sparse_images(max_image,images_per_scene=5,path='/home/bnapp/datasets/mnist/'):
     #todo: ensure not taking the same image over and over again
     mnist = MNIST(path)
