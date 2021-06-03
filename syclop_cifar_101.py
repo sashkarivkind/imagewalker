@@ -41,17 +41,8 @@ def bad_res101(img,res):
     upsmp = cv2.resize(dwnsmp,sh[:2], interpolation = cv2.INTER_CUBIC)
     return upsmp
 
-
-
 import importlib
 importlib.reload(misc)
-
-
-
-
-
-
-
 
 n_timesteps = 5
 
@@ -70,7 +61,7 @@ rnn_accuracy = []
 cnn_accuracy = []
 
 res_list = [25,10,8]
-
+print('00000')
 for res in res_list:
     print('############################################## RES = {} #############################################'.format(res))
     train_dataset, test_dataset = create_cifar_dataset(images, labels,res = res,return_datasets=True, mixed_state = False, add_seed = 0)

@@ -130,7 +130,7 @@ for trial in range(num_trials):
             train_dataset_y,
             batch_size=64,
             epochs=1,
-            # We pass some validation for
+            # We pass some validation for128
             # monitoring validation loss and metrics
             # at the end of each epoch
             validation_data=(test_dataset_x, test_dataset_y),
@@ -187,7 +187,7 @@ plt.plot(x, y,'r',label = 'with coordinates')
 plt.fill_between(x, train_dataframe['confidance-'] , train_dataframe['confidance+'])
 plt.title('Mean train accuracy from {} trials \n with {} reandom trajectories'.format(num_trials, num_trajectories))
 plt.savefig('train_accuracy_{}.png'.format(num_trajectories))
-
+128
 train_dataframe_no_coordinates['mean'] = train_dataframe_no_coordinates.mean(numeric_only = True, axis = 1)
 train_dataframe_no_coordinates['confidance-'] = st.t.interval(alpha = 0.95, df = len(train_dataframe_no_coordinates) - 1, loc = train_dataframe_no_coordinates.mean(axis = 1), scale = st.sem(train_dataframe_no_coordinates, axis = 1))[0]
 train_dataframe_no_coordinates['confidance+'] = st.t.interval(alpha = 0.95, df = len(train_dataframe_no_coordinates) - 1, loc = train_dataframe_no_coordinates.mean(axis = 1), scale = st.sem(train_dataframe_no_coordinates, axis = 1))[1]
