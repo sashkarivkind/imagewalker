@@ -1,29 +1,21 @@
 '''
-The follwing code runs a test between two RNN network on the CIFAR dataset 
+The follwing code runs a test lstm network on the CIFAR dataset 
 
 I will explicitly write the networks here for ease of understanding 
 
-Results: 
-    h = 128 , started overfitting after 12 epochs and don't seem to learn more 
-    after that. Ran for 30 and 50 epchs, train accur reached 86% after 30 epochs with 0.2 
-    dropout and 73 with 0.3 and 65% with 0.5 woth 50 eohcs but there doesn't seem tp be 
-    more learning as the val accuracy stays the same. 
-    change h between 64,128,256 doesn't seem to do all that much.'
-    
 
 
 '''
 
 from __future__ import division, print_function, absolute_import
+
 print('Starting..................................')
 import sys
-#os.chdir('/home/labs/ahissarlab/orra/imagewalker')
 sys.path.insert(1, '/home/labs/ahissarlab/orra/imagewalker')
 import numpy as np
 import cv2
-from RL_networks import Stand_alone_net
+import misc
 import pandas as pd
-
 import matplotlib.pyplot as plt
 import pickle
 
@@ -52,14 +44,12 @@ def bad_res102(img,res):
     dwnsmp=cv2.resize(img,res, interpolation = cv2.INTER_AREA)
     return dwnsmp
 
-# from misc import Logger
+import importlib
+importlib.reload(misc)
+from misc import Logger
 import os 
 
-hp = HP()
-hp.save_path = 'saved_runs'
 
-hp.description = "syclop cifar basic rnn runs"
-hp.this_run_name = 'syclop_basic_rnn'
 def deploy_logs():
     if not os.path.exists(hp.save_path):
         os.makedirs(hp.save_path)
@@ -83,15 +73,15 @@ def deploy_logs():
 epochs = int(sys.argv[1])
 
 sample = int(sys.argv[2])
-rnn_dropout
+
 res = int(sys.argv[3])
 
 hidden_size = int(sys.argv[4])
    
-cnn_dropout = 0.3
+cnn_dropout = 0.4
 
 rnn_dropout = 0.2
- 
+
 n_timesteps = sample
 def split_dataset_xy(dataset):
     dataset_x1 = [uu[0] for uu in dataset]
@@ -99,12 +89,12 @@ def split_dataset_xy(dataset):
     dataset_y = [uu[-1] for uu in dataset]
     return (np.array(dataset_x1),np.array(dataset_x2)[:,:n_timesteps,:]),np.array(dataset_y)
 
-def extended_rnn_model(n_timesteps = 5, hidden_size = 128,input_size = 32, concat = True):
+def cnn_deep_gru(n_timesteps = 5, hidden_size = 128,input_size = 32, concat = True):
     '''
     
     CNN RNN combination that extends the CNN to a network that achieves 
     ~80% accuracy on full res cifar.
-rnn_dropout
+
     Parameters
     ----------
     n_timesteps : TYPE, optional
@@ -153,10 +143,13 @@ rnn_dropout
     print(x.shape)
 
     # define LSTM model
-    x = keras.layers.GRU(hidden_size,input_shape=(n_timesteps, None),return_sequences=True, recurrent_dropout=rnn_dropout)(x)
+    x = keras.layers.GRU(hidden_size,input_shape=(n_timesteps, None),return_sequences=True,recurrent_dropout=rnn_dropout)(x)
+    x = keras.layers.GRU(hidden_size,input_shape=(n_timesteps, None),return_sequences=True,recurrent_dropout=rnn_dropout)(x)
+    x = keras.layers.GRU(hidden_size,input_shape=(n_timesteps, None),return_sequences=True,recurrent_dropout=rnn_dropout)(x)
+    x = keras.layers.GRU(hidden_size,input_shape=(n_timesteps, None),return_sequences=True,recurrent_dropout=rnn_dropout)(x)
     x = keras.layers.Flatten()(x)
     x = keras.layers.Dense(10,activation="softmax")(x)
-    model = keras.models.Model(inputs=[inputA,inputB],outputs=x, name = 'extended_rnn_model_{}'.format(concat))
+    model = keras.models.Model(inputs=[inputA,inputB],outputs=x, name = 'cnn_deep_gru_{}'.format(concat))
     opt=tf.keras.optimizers.Adam(lr=1e-3)
 
     model.compile(
@@ -166,10 +159,15 @@ rnn_dropout
     )
     return model
 
-rnn_net = extended_rnn_model(n_timesteps = sample, hidden_size = hidden_size,input_size = 32, concat = True)
+rnn_net = cnn_deep_gru(n_timesteps = sample, hidden_size = hidden_size,input_size = 32, concat = True)
 cnn_net = cnn_net = extended_cnn_one_img(n_timesteps = sample, input_size = 32)
 
-#deploy_logs()
+# hp = HP()
+# hp.save_path = 'saved_runs'
+
+# hp.description = "syclop cifar net search runs"
+# hp.this_run_name = 'syclop_{}'.format(rnn_net.name)
+# deploy_logs()
 
 train_dataset, test_dataset = create_cifar_dataset(images, labels,res = res,
                                     sample = sample, return_datasets=True, 
@@ -189,7 +187,7 @@ cnn_history = cnn_net.fit(
     # monitoring validation loss and metrics
     # at the end of each epoch
     validation_data=(test_dataset_x, test_dataset_y),
-    verbose = 0)
+    verbose = 1)
 print('################# {} Validation Accuracy = '.format(cnn_net.name),cnn_history.history['val_sparse_categorical_accuracy'])
 print("##################### Fit {} and trajectories model on training data res = {} ##################".format(rnn_net.name,res))
 rnn_history = rnn_net.fit(
@@ -201,27 +199,27 @@ rnn_history = rnn_net.fit(
     # monitoring validation loss and metrics
     # at the end of each epoch
     validation_data=(test_dataset_x, test_dataset_y),
-    verbose = 0)
+    verbose = 1)
 
 print('################# {} Validation Accuracy = '.format(cnn_net.name),cnn_history.history['val_sparse_categorical_accuracy'])
-print("##################### Fit {} and trajectories model on training data res = {} ##################".format(rnn_net.name,res))
+print('################# {} Training Accuracy = '.format(cnn_net.name),rnn_history.history['sparse_categorical_accuracy'])
 
 print('################# {} Validation Accuracy = '.format(rnn_net.name),rnn_history.history['val_sparse_categorical_accuracy'])
 print('################# {} Training Accuracy = '.format(rnn_net.name),rnn_history.history['sparse_categorical_accuracy'])
 
-print(rnn_history.history['val_sparse_categorical_accuracy'][-1])
+
 plt.figure()
 plt.plot(rnn_history.history['sparse_categorical_accuracy'], label = 'train')
 plt.plot(rnn_history.history['val_sparse_categorical_accuracy'], label = 'val')
 plt.plot(cnn_history.history['sparse_categorical_accuracy'], label = 'cnn train')
 plt.plot(cnn_history.history['val_sparse_categorical_accuracy'], label = 'cnn val')
 plt.legend()
-plt.title('Basic RNN on cifar res = {} hs = {} dropout = {} rnn dropout = {}'.format(res, hidden_size,cnn_dropout,rnn_dropout))
-plt.savefig('Basic RNN on Cifar res = {} val accur = {} hs = {} dropout = {} rnn dropout = {}.png'.format(res,rnn_history.history['val_sparse_categorical_accuracy'][-1], hidden_size,cnn_dropout,rnn_dropout))
+plt.title('{} on cifar res = {} hs = {} dropout = {}'.format(rnn_net.name, res, hidden_size,cnn_dropout))
+plt.savefig('{} on Cifar res = {} val accur = {} hs = {} dropout = {}.png'.format(rnn_net.name,res,rnn_history.history['val_sparse_categorical_accuracy'][-1], hidden_size,cnn_dropout))
 
-with open('/home/labs/ahissarlab/orra/imagewalker/cifar_net_search/BasicRnnHistoryDict{}_{}_{}'.format(hidden_size,cnn_dropout,rnn_dropout), 'wb') as file_pi:
+with open('/home/labs/ahissarlab/orra/imagewalker/cifar_net_search/{}HistoryDict{}_{}'.format(rnn_net.name, hidden_size,cnn_dropout), 'wb') as file_pi:
     pickle.dump(rnn_history.history, file_pi)
     
-with open('/home/labs/ahissarlab/orra/imagewalker/cifar_net_search/1imgCnnHistoryDict', 'wb') as file_pi:
+with open('/home/labs/ahissarlab/orra/imagewalker/cifar_net_search/{}HistoryDict'.format(cnn_net.name), 'wb') as file_pi:
     pickle.dump(cnn_history.history, file_pi)
     

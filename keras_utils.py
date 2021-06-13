@@ -506,6 +506,8 @@ def extended_rnn_model(n_timesteps = 5, hidden_size = 128,input_size = 32, conca
     )
     return model
 
+
+    
 def rnn_model_dense(n_timesteps = 5, gru_size = 128):
     inputA = keras.layers.Input(shape=(n_timesteps,28,28,1))
     inputB = keras.layers.Input(shape=(n_timesteps,2))
@@ -708,7 +710,7 @@ def cnn_one_img(n_timesteps = 5, input_size = 28, input_dim = 1):
     )
     return model
 
-def extended_cnn_one_img(n_timesteps = 5, input_size = 32):
+def extended_cnn_one_img(n_timesteps = 5, input_size = 32 ,dropout = 0.2):
     '''
     Takes only the first image from the burst and pass it trough a net that 
     aceives ~80% accuracy on full res cifar. 
@@ -721,17 +723,17 @@ def extended_cnn_one_img(n_timesteps = 5, input_size = 32):
     print(x1.shape)
     x1=keras.layers.Conv2D(32,(3,3),activation='relu', padding = 'same')(x1)
     x1=keras.layers.MaxPooling2D(pool_size=(2, 2))(x1)
-    x1=keras.layers.Dropout(0.2)(x1)
+    x1=keras.layers.Dropout(dropout)(x1)
 
     x1=keras.layers.Conv2D(64,(3,3),activation='relu', padding = 'same')(x1)
     x1=keras.layers.Conv2D(64,(3,3),activation='relu', padding = 'same')(x1)
     x1=keras.layers.MaxPooling2D(pool_size=(2, 2))(x1)
-    x1=keras.layers.Dropout(0.2)(x1)
+    x1=keras.layers.Dropout(dropout)(x1)
 
     x1=keras.layers.Conv2D(128,(3,3),activation='relu', padding = 'same')(x1)
     x1=keras.layers.Conv2D(128,(3,3),activation='relu', padding = 'same')(x1)
     x1=keras.layers.MaxPooling2D(pool_size=(2, 2))(x1)
-    x1=keras.layers.Dropout(0.2)(x1)
+    x1=keras.layers.Dropout(dropout)(x1)
     print(x1.shape)
 
     # x1=keras.layers.TimeDistributed(keras.layers.MaxPooling2D(pool_size=(2, 2)))(x1)

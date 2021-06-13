@@ -4,16 +4,25 @@ network on the CIFAR dataset
 
 I will explicitly write the networks here for ease of understanding 
 
-Running a net [32,64,128] only ConvLSTM without dropout
-################# ConvLSTM_False Validation Accuracy =  [0.4234, 0.4724, 0.4916, 0.5356, 0.5498, 0.548, 0.5452, 0.5408, 0.5452, 0.5444, 0.536, 0.5438, 0.5256, 0.533, 0.545, 0.5322, 0.5288, 0.5406, 0.5374, 0.5382, 0.5262, 0.5358, 0.5286, 0.529, 0.539, 0.5346, 0.5432, 0.5398, 0.5298, 0.5296]
-################# ConvLSTM_False Training Accuracy =  [0.352, 0.4515111, 0.51217777, 0.5662, 0.63375556, 0.7343111, 0.8472, 0.92388886, 0.95086664, 0.9685111, 0.9725111, 0.97726667, 0.97882223, 0.9786889, 0.98053336, 0.98477775, 0.98322225, 0.9847556, 0.98584443, 0.9860889, 0.9863333, 0.9879778, 0.98895556, 0.9884, 0.9898889, 0.98928887, 0.9894222, 0.99126667, 0.99175555, 0.9908]
-Running a net [32,64,128] only ConvLSTM with dropout = 0.2
-
+Running an all convLSTM network with [32,32,64,64,128,128] dropout = 0.1 learnt nothing
+ConvLSTM_True Validation Accuracy =  [0.0976, 0.1058, 0.0958, 0.1038, 0.1038, 0.1024, 0.097, 0.1024, 0.0976, 0.1058, 0.0976, 0.0986, 0.095, 0.0958, 0.097, 0.1058, 0.1038, 0.0976, 0.0958, 0.0958, 0.0976, 0.0976, 0.1064, 0.0976, 0.1038, 0.0986, 0.0986, 0.0986, 0.1024, 0.0958]
+ConvLSTM_True Training Accuracy =  [0.09735555, 0.09991111, 0.10057778, 0.098177776, 0.099022225, 0.09866667, 0.09928889, 0.098844446, 0.097333334, 0.09877778, 0.099244446, 0.09762222, 0.09753333, 0.1006, 0.09808889, 0.0986, 0.10008889, 0.09957778, 0.09866667, 0.09933333, 0.098733336, 0.09802222, 0.09848889, 0.098688886, 0.10022222, 0.097666666, 0.101111114, 0.101222225, 0.10253333, 0.09933333]
 
 The same with no dropout:
+################# ConvLSTM_False Validation Accuracy =  [0.3878, 0.4404, 0.4658, 0.4984, 0.5326, 0.5346, 0.5488, 0.5436, 0.533, 0.52, 0.5176, 0.5284, 0.5044, 0.5074, 0.501, 0.4964, 0.4984, 0.5032, 0.5008, 0.502, 0.4996, 0.4982, 0.488, 0.5034, 0.505, 0.4786, 0.497, 0.514, 0.516, 0.505]
+################# ConvLSTM_False Training Accuracy =  [0.29066667, 0.3886, 0.43748888, 0.47655556, 0.52477777, 0.57622224, 0.6383111, 0.71088886, 0.7854889, 0.8486222, 0.89375556, 0.9188, 0.93637776, 0.9466444, 0.95633334, 0.9564, 0.96464443, 0.9667778, 0.96691114, 0.9700222, 0.9739778, 0.9757778, 0.9756, 0.9775556, 0.9786, 0.9791333, 0.9784222, 0.9824889, 0.98224443, 0.98135555]
 
+rnn dropout = 0, cnn dropout = 0.2, with three layer [32,64,128] out.773698
 
+rnn dropout = 0, cnn dropout = 0.2, with six layers [32,32,64,64,128,128] out.773717
 
+rnn dropout = 0, cnn dropout = 0.2 with six layers [32,32,64,64,128,128] out.773717
+
+rnn dropout = 0.1, cnn dropout = 0.2 with six layers [32,32,64,64,128,128] out.
+
+rnn dropout = 0.2, cnn dropout = 0.4 with six layers [32,32,64,64,128,128] out.
+
+rnn dropout = 0.2, cnn dropout = 0.4 with six layers [32,32,64,64,128,128] plus another dense layer out.
 '''
 
 from __future__ import division, print_function, absolute_import
@@ -53,7 +62,7 @@ def bad_res101(img,res):
 def bad_res102(img,res):
     sh=np.shape(img)
     dwnsmp=cv2.resize(img,res, interpolation = cv2.INTER_AREA)
-    return dwnsmp
+    return dwnsmp# int(sys.argv[3])
 
 import importlib
 importlib.reload(misc)
@@ -71,7 +80,7 @@ def deploy_logs():
         if not os.path.exists(candidate_path):
             hp.this_run_path = candidate_path
             os.makedirs(hp.this_run_path)
-            dir_success = Truecnn_net = cnn_one_img(n_timesteps = sample, input_size = 28, input_dim = 1)
+            dir_success = True# int(sys.argv[3])n_timesteps = sample, input_size = 28, input_dim = 1)
             break
     if not dir_success:
         error('run name already exists!')
@@ -100,31 +109,23 @@ def split_dataset_xy(dataset):
     dataset_y = [uu[-1] for uu in dataset]
     return (np.array(dataset_x1),np.array(dataset_x2)[:,:n_timesteps,:]),np.array(dataset_y)
 
-def convgru(n_timesteps = 5, cell_size = 128, input_size = 28,input_dim = 3, concat = False):
+def convgru(n_timesteps = 5, cell_size = 128, input_size = 28,input_dim = 1, concat = False):
     inputA = keras.layers.Input(shape=(n_timesteps,input_size,input_size,input_dim))
     inputB = keras.layers.Input(shape=(n_timesteps,2))
-    
+
     # define LSTM model
-    x = keras.layers.ConvLSTM2D(32, 3, return_sequences=True, padding = 'same')(inputA)
-    #x = keras.layers.ConvLSTM2D(32, 3, return_sequences=True, padding = 'valid')(x)
+    x = keras.layers.ConvLSTM2D(cell_size, 2, dropout = 0.1, recurrent_dropout=0.1, return_sequences=True)(inputA)
     print(x.shape)
-    #x = keras.layers.ConvLSTM2D(64, 2, return_sequences=True, padding = 'same')(x)
-    x = keras.layers.ConvLSTM2D(64, 2, return_sequences=True, padding = 'valid')(x)
-    print(x.shape)
-    #x = keras.layers.ConvLSTM2D(128, 2, return_sequences=True, padding = 'same')(x)
-    x = keras.layers.ConvLSTM2D(128, 2, return_sequences=True, padding = 'valid')(x)
-    print(x.shape)
-    x = keras.layers.TimeDistributed(keras.layers.Flatten())(x)
-    print(x.shape)
-    if concat:
-        x = keras.layers.Concatenate()([x,inputB])
+    x = keras.layers.ConvLSTM2D(cell_size, 2, dropout = 0.2, recurrent_dropout=0.1, return_sequences=True)(x)
+    # print(x.shape)
+    x = keras.layers.ConvLSTM2D(cell_size, 2, dropout = 0.1, recurrent_dropout=0.1, return_sequences=True)(x)
     print(x.shape)
     x = keras.layers.Flatten()(x)
     print(x.shape)
-    x = keras.layers.Dense(1024,activation="relu")(x)
+    if concat:
+        x = keras.layers.Concatenate()([x,inputB])
     x = keras.layers.Dense(10,activation="softmax")(x)
-    print(x.shape)
-    model = keras.models.Model(inputs=[inputA,inputB],outputs=x, name = 'ConvLSTM_{}'.format(concat))
+    model = keras.models.Model(inputs=[inputA,inputB],outputs=x, name = 'Basic_ConvLSTM_{}'.format(concat))
     opt=tf.keras.optimizers.Adam(lr=3e-3)
 
     model.compile(
@@ -134,8 +135,8 @@ def convgru(n_timesteps = 5, cell_size = 128, input_size = 28,input_dim = 3, con
     )
     return model
 
-rnn_net = convgru(n_timesteps = sample, cell_size = hidden_size,input_size = res  , concat = True)
-cnn_net = cnn_net = extended_cnn_one_img(n_timesteps = sample, input_size = res)
+rnn_net = convgru(n_timesteps = sample, cell_size = hidden_size,input_size = 8, input_dim = 3  , concat = False)
+cnn_net = cnn_net = extended_cnn_one_img(n_timesteps = sample, input_size = 8)
 
 # hp = HP()
 # hp.save_path = 'saved_runs'

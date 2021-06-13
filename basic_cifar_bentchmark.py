@@ -34,16 +34,19 @@ def net():
     #Define CNN
     x = keras.layers.Conv2D(32,(3,3),activation='relu', padding = 'same')(input)
     x = keras.layers.Conv2D(32,(3,3),activation='relu', padding = 'same')(x)
-    x = keras.layers.MaxPooling2D((2, 2))(x)
     x = keras.layers.Dropout(0.2)(x)
+    x = keras.layers.MaxPooling2D((2, 2))(x)
+
     x = keras.layers.Conv2D(64,(3,3),activation='relu', padding = 'same')(x)
     x = keras.layers.Conv2D(64,(3,3),activation='relu', padding = 'same')(x)
-    x = keras.layers.MaxPooling2D((2, 2))(x)
     x = keras.layers.Dropout(0.2)(x)
+    x = keras.layers.MaxPooling2D((2, 2))(x)
+
     x = keras.layers.Conv2D(128,(3,3),activation='relu', padding = 'same')(x)
     x = keras.layers.Conv2D(128,(3,3),activation='relu', padding = 'same')(x)
-    x = keras.layers.MaxPooling2D((2, 2))(x)
     x = keras.layers.Dropout(0.2)(x)
+    x = keras.layers.MaxPooling2D((2, 2))(x)
+
     #Flatten and add linear layer and softmax
     x = keras.layers.Flatten()(x)
     x = keras.layers.Dense(128,activation="relu")(x)
@@ -86,7 +89,7 @@ def run_test_harness():
     # define model
     model = net()
     # fit model
-    history = model.fit(trainX, trainY, epochs=100, batch_size=64, validation_data=(testX, testY), verbose=0)
+    history = model.fit(trainX, trainY, epochs=15, batch_size=64, validation_data=(testX, testY), verbose=1)
     # evaluate model
     _, acc = model.evaluate(testX, testY, verbose=0)
     print('> %.3f' % (acc * 100.0))
