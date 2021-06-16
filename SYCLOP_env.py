@@ -56,13 +56,8 @@ class Sensor():
         self.hp.upadte_with_defaults(att=kwargs, default_att=defaults.__dict__)
 
         self.eclamp_evnt_cnt = 100
-        self.eclamp_substep_r = 1
+        self.eclamp_substep_r = 0.5
         self.eclamp_max_substeps = 20
-
-#         self.cwx1 = (self.hp.winx-self.hp.centralwinx)//2
-#         self.cwy1 = (self.hp.winy-self.hp.centralwiny)//2
-#         self.cwx2 = self.cwx1 + self.hp.centralwinx
-#         self.cwy2 = self.cwy1 + self.hp.centralwiny
 
         self.frame_size = self.hp.winx * self.hp.winy
         self.reset()
@@ -122,6 +117,7 @@ class Sensor():
     # events clamp
     def eclamp_step(self, scene, agent, phi):
         q0 = agent.q
+#         print('q0',q0)
         view0 = self.get_view(scene, agent)
         view0_cw = view0[self.cwy1:self.cwy2,self.cwx1:self.cwx2]
                         
@@ -129,11 +125,15 @@ class Sensor():
         substeps = 0
         q1_ana = q0;
         while evnt_cnt < self.eclamp_evnt_cnt and substeps < self.eclamp_max_substeps:
-                        
-            q1_ana = q1_ana + self.eclamp_substep_r*[np.cos(phi),np.sin(phi)]
+            
+            q1_ana[0] = q1_ana[0] + self.eclamp_substep_r * np.cos(phi)
+            q1_ana[1] = q1_ana[1] + self.eclamp_substep_r * np.sin(phi)
+            
             q1_ana = np.minimum(q1_ana,agent.max_q) # enforce_bounderies ??
             q1_ana = np.maximum(q1_ana,[0.0, 0.0])
-            q1 = np.int32(np.floor(q1_ana))
+            q1 = np.int32(np.floor(q1_ana+0.5))
+            
+#             print(phi,q1_ana,q1)
             
             if (q1 != q0).any():
                 agent.set_manual_q(q1)
@@ -144,7 +144,8 @@ class Sensor():
                 evnt_cnt = np.sum(np.abs(dvs_view))
 
             substeps+=1
-            
+        
+        agent.set_manual_q(q1)
 #         print(substeps)    
         return q1, substeps
 
