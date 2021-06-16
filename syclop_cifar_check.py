@@ -30,11 +30,14 @@ import SYCLOP_env as syc
 #Define function for low resolution lens on syclop
 def bad_res101(img,res):
     sh=np.shape(img)
-    dwnsmp=cv2.resize(img,res, interpolation = cv2.INTER_CUBIC)
-    upsmp = cv2.resize(dwnsmp,sh[:2], interpolation = cv2.INTER_CUBIC)
+    dwnsmp=cv2.resize(img,res, interpolation = cv2.INTER_AREA)
+    upsmp = cv2.resize(dwnsmp,sh[:2], interpolation = cv2.INTER_AREA)
     return upsmp
 
-
+def bad_res102(img,res):
+    sh=np.shape(img)
+    dwnsmp=cv2.resize(img,res, interpolation = cv2.INTER_AREA)
+    return dwnsmp
 
 import importlib
 importlib.reload(misc)
@@ -56,7 +59,7 @@ def deploy_logs():
         if not os.path.exists(candidate_path):
             hp.this_run_path = candidate_path
             os.makedirs(hp.this_run_path)
-            dir_success = True
+            dir_success = Truecnn_net = cnn_one_img(n_timesteps = sample, input_size = 28, input_dim = 1)
             break
     if not dir_success:
         error('run name already exists!')
@@ -79,7 +82,7 @@ elif cnn_net == 2:
     cnn_net = extended_cnn_one_img(n_timesteps = sample, input_size = 32)
     
 
-rnn_net = 6#int(sys.argv[2]) #Choose RNN network
+rnn_net = 7#int(sys.argv[2]) #Choose RNN network
 
 if rnn_net == 1:
     rnn_net = rnn_model(n_timesteps = sample, input_size = 32)
@@ -92,7 +95,9 @@ elif rnn_net == 4:
 elif rnn_net == 5:
     rnn_net = no_cnn_low_features_model(input_size = 4, input_dim = 3)
 elif rnn_net == 6:
-    rnn_net = low_features_middle_cnn_model(input_size = 4, input_dim = 3)    
+    rnn_net = low_features_middle_cnn_model(input_size = 4, input_dim = 3)  
+elif rnn_net == 7:
+    rnn_net = convgru(input_size = 4, input_dim = 3,concat = False)  
 
 res = 8#int(sys.argv[3])
 
@@ -106,7 +111,10 @@ def split_dataset_xy(dataset):
     return (np.array(dataset_x1),np.array(dataset_x2)[:,:n_timesteps,:]),np.array(dataset_y)
 
 #deploy_logs()
-train_dataset, test_dataset = create_cifar_dataset(images, labels,res = res,sample = sample, return_datasets=True, mixed_state = False, add_seed = 0)
+train_dataset, test_dataset = create_cifar_dataset(images, labels,res = res,
+                                    sample = sample, return_datasets=True, 
+                                    mixed_state = False, add_seed = 0,
+                                    bad_res_func = bad_res102)#, up_sample = True)
 train_dataset_x, train_dataset_y = split_dataset_xy(train_dataset)
 test_dataset_x, test_dataset_y = split_dataset_xy(test_dataset)
 # print("##################### Fit {} and trajectories model on training data res = {} ##################".format(cnn_net.name,res))
@@ -126,10 +134,20 @@ rnn_history = rnn_net.fit(
     train_dataset_x,
     train_dataset_y,
     batch_size=64,
-    epochs=30,
+    epochs=8,
     # We pass some validation for
     # monitoring validation loss and metrics
     # at the end of each epoch
     validation_data=(test_dataset_x, test_dataset_y),
     verbose = 1)
 print('################# {} Validation Accuracy = '.format(rnn_net.name),rnn_history.history['val_sparse_categorical_accuracy'])
+print('################# {} Training Accuracy = '.format(rnn_net.name),rnn_history.history['sparse_categorical_accuracy'])
+
+
+
+plt.figure()
+plt.plot(rnn_history.history['sparse_categorical_accuracy'], label = 'train')
+plt.plot(rnn_history.history['val_sparse_categorical_accuracy'], label = 'val')
+plt.legend()
+plt.title('ConvGRU on cifar')
+plt.savefig('ConvGRU on Cifar res = 8 val accur = {}'.format(rnn_history.history['val_sparse_categorical_accuracy'][-1]))
