@@ -39,6 +39,34 @@ def bad_res102(img,res):
     dwnsmp=cv2.resize(img,res, interpolation = cv2.INTER_CUBIC)
     return dwnsmp
 
+def create_trajectory101(starting_point,sample):
+    #starting_point = np.array([agent.max_q[0]//2,agent.max_q[1]//2])
+    steps  = []
+    for j in range(sample):
+        steps.append(starting_point*1)
+        starting_point += np.random.randint(-5,5,2) 
+        
+    return steps
+
+def create_trajectory102(starting_point,sample_size):
+    '''
+    Creating a trajectory for syclop 
+    This implimantation creates a more coherent path 
+    Give N samples the function will create a path that takes three 
+    random directions. 
+    Trying with 10 samples to allow sampling.
+
+    '''
+    location = starting_point
+    trajectory_steps  = []
+    turn = int(sample_size/3) #Defined to make 3 turns in the trajectories
+    
+    #init_func = 
+    for j in range(sample_size):
+        trajectory_steps.append(location*1)
+        location += np.random.randint(-5,5,2) 
+        
+    return trajectory_steps
 #The Dataset formation
 def create_mnist_dataset(images, labels, res, sample = 5, mixed_state = True, add_traject = True,
                    trajectory_list=None,return_datasets=False, add_seed = 20, show_fig = False,
@@ -323,7 +351,6 @@ def create_cifar_dataset(images, labels, res, sample = 5, mixed_state = True, ad
         count += 1
         
 
-    print(q_seq[0].shape)
     if add_traject: #If we add the trjectories the train list will become a list of lists, the images and the 
         #corrosponding trajectories, we will change the dataset structure as well. Note the the labels stay the same.
         ts_train = (ts_images[:45000], q_seq[:45000]) 
@@ -920,7 +947,7 @@ def no_cnn(n_timesteps = 5, cell_size = 128, input_size = 28,input_dim = 1, conc
 
 def no_cnn_dense(n_timesteps = 5, cell_size = 128, input_size = 28,input_dim = 1, concat = True):
     inputA = keras.layers.Input(shape=(n_timesteps,input_size,input_size,input_dim))
-    inputB = keras.layers.Input(shape=(n_timesteps,2))
+    inputB = keras.layers.Input(extended_cnn_one_imgshape=(n_timesteps,2))
     x1=keras.layers.TimeDistributed(keras.layers.Flatten())(inputA)
     print(x1.shape)
     if concat:
@@ -964,7 +991,7 @@ def no_cnn_low_features_model(n_timesteps = 5, cell_size = 128, input_size = 32,
             slice_ = gru1(slice_)
             #print(slice_.shape)
             slice_ = keras.layers.Reshape((n_timesteps, 1, 1, 4*4*16))(slice_)
-            #print(slice_.shape)
+            #print(slice_.shape)cnn_dropout
             v_slices.append(slice_)
             v_coor += 1
         h_coor += 1
@@ -1087,6 +1114,73 @@ def convgru(n_timesteps = 5, cell_size = 128, input_size = 28,input_dim = 1, con
     x = keras.layers.Dense(10,activation="softmax")(x)
     model = keras.models.Model(inputs=[inputA,inputB],outputs=x, name = 'ConvLSTM_{}'.format(concat))
     opt=tf.keras.optimizers.Adam(lr=3e-3)
+
+    model.compile(
+        optimizer=opt,
+        loss="sparse_categorical_crossentropy",
+        metrics=["sparse_categorical_accuracy"],
+    )
+    return model
+
+def cnn_lstm(n_timesteps = 5, hidden_size = 128,input_size = 32, concat = True, cnn_dropout = 0.4, rnn_dropout = 0.2):
+    '''
+    
+    CNN RNN combination that extends the CNN to a network that achieves 
+    ~80% accuracy on full res cifar.
+
+    Parameters
+    ----------
+    n_timesteps : TYPE, optional
+        DESCRIPTION. The default is 5.
+    img_dim : TYPE, optional
+        DESCRIPTION. The default is 32.
+    hidden_size : TYPE, optional
+        DESCRIPTION. The default is 128.
+    input_size : TYPE, optional
+        DESCRIPTION. The default is 32.
+
+    Returns
+    -------
+    model : TYPE
+        DESCRIPTION.
+
+    '''
+    inputA = keras.layers.Input(shape=(n_timesteps,input_size,input_size,3))
+    inputB = keras.layers.Input(shape=(n_timesteps,2))
+
+    # define CNN model
+
+    x1=keras.layers.TimeDistributed(keras.layers.Conv2D(32,(3,3),activation='relu', padding = 'same'))(inputA)
+    x1=keras.layers.TimeDistributed(keras.layers.Conv2D(32,(3,3),activation='relu', padding = 'same'))(x1)
+    x1=keras.layers.TimeDistributed(keras.layers.MaxPooling2D(pool_size=(2, 2)))(x1)
+    x1=keras.layers.TimeDistributed(keras.layers.Dropout(cnn_dropout))(x1)
+
+    x1=keras.layers.TimeDistributed(keras.layers.Conv2D(64,(3,3),activation='relu', padding = 'same'))(x1)
+    x1=keras.layers.TimeDistributed(keras.layers.Conv2D(64,(3,3),activation='relu', padding = 'same'))(x1)
+    x1=keras.layers.TimeDistributed(keras.layers.MaxPooling2D(pool_size=(2, 2)))(x1)
+    x1=keras.layers.TimeDistributed(keras.layers.Dropout(cnn_dropout))(x1)
+
+    x1=keras.layers.TimeDistributed(keras.layers.Conv2D(128,(3,3),activation='relu', padding = 'same'))(x1)
+    x1=keras.layers.TimeDistributed(keras.layers.Conv2D(128,(3,3),activation='relu', padding = 'same'))(x1)
+    x1=keras.layers.TimeDistributed(keras.layers.MaxPooling2D(pool_size=(2, 2)))(x1)
+    x1=keras.layers.TimeDistributed(keras.layers.Dropout(cnn_dropout))(x1)
+    print(x1.shape)
+
+
+    x1=keras.layers.TimeDistributed(keras.layers.Flatten())(x1)
+    print(x1.shape)
+    if concat:
+        x = keras.layers.Concatenate()([x1,inputB])
+    else:
+        x = x1
+    print(x.shape)
+
+    # define LSTM model
+    x = keras.layers.LSTM(hidden_size,input_shape=(n_timesteps, None),return_sequences=True,recurrent_dropout=rnn_dropout)(x)
+    x = keras.layers.Flatten()(x)
+    x = keras.layers.Dense(10,activation="softmax")(x)
+    model = keras.models.Model(inputs=[inputA,inputB],outputs=x, name = 'cnn_lstm_{}'.format(concat))
+    opt=tf.keras.optimizers.Adam(lr=5e-4)
 
     model.compile(
         optimizer=opt,

@@ -12,6 +12,8 @@ Running a net [32,64,128] only ConvLSTM with dropout = 0.2
 
 The same with no dropout:
 
+out.440443
+
 
 
 '''
@@ -20,8 +22,8 @@ from __future__ import division, print_function, absolute_import
 
 print('Starting..................................')
 import sys
-sys.path.insert(1, "/home/orram/Documents/GitHub/imagewalker/")#'/home/labs/ahissarlab/orra/imagewalker')
-
+sys.path.insert(1, '/home/labs/ahissarlab/orra/imagewalker')
+sys.path.insert(1, '/home/orram/Documents/GitHub/imagewalker')
 
 import numpy as np
 import cv2
@@ -81,19 +83,51 @@ def deploy_logs():
     print('description: ', hp.description)
     #print('hyper-parameters (partial):', hp.dict)
 
-epochs = 10#int(sys.argv[1])
+if len(sys.argv) > 1:
+    paramaters = {
+    'epochs' : int(sys.argv[1]),
+    
+    'sample' : int(sys.argv[2]),
+    
+    'res' : int(sys.argv[3]),
+    
+    'hidden_size' : int(sys.argv[4]),
+    
+    'cnn_dropout' : 0.4,
 
-sample = 5#int(sys.argv[2])
+    'rnn_dropout' : 0.2,
 
-res = 8#int(sys.argv[3])
+    'lr' : 5e-4
+    }
+    
+else:
+    paramaters = {
+    'epochs' : 1,
+    
+    'sample' : 5,
+    
+    'res' : 8,
+    
+    'hidden_size' : 128,
+    
+    'cnn_dropout' : 0.4,
 
-hidden_size = 128#int(sys.argv[4])
-   
-cnn_dropout = 0.3
+    'rnn_dropout' : 0.2,
+
+    'lr' : 5e-4
+    }
+    
+print(paramaters)
+for key,val in paramaters.items():
+    exec(key + '=val')
+
+n_timesteps = sample
+
+cnn_dropout = 0.4
 
 rnn_dropout = 0.2
 
-n_timesteps = sample
+lr = 5e-4
 def split_dataset_xy(dataset):
     dataset_x1 = [uu[0] for uu in dataset]
     dataset_x2 = [uu[1] for uu in dataset]
@@ -105,14 +139,17 @@ def convgru(n_timesteps = 5, cell_size = 128, input_size = 28,input_dim = 3, con
     inputB = keras.layers.Input(shape=(n_timesteps,2))
     
     # define LSTM model
-    x = keras.layers.ConvLSTM2D(32, 3, return_sequences=True, padding = 'same')(inputA)
+    x = keras.layers.ConvLSTM2D(32, 3, return_sequences=True,padding = 'same',dropout = cnn_dropout, recurrent_dropout=rnn_dropout)(inputA)
     #x = keras.layers.ConvLSTM2D(32, 3, return_sequences=True, padding = 'valid')(x)
+    x=keras.layers.TimeDistributed(keras.layers.MaxPooling2D(pool_size=(2, 2)))(x)
     print(x.shape)
     #x = keras.layers.ConvLSTM2D(64, 2, return_sequences=True, padding = 'same')(x)
-    x = keras.layers.ConvLSTM2D(64, 2, return_sequences=True, padding = 'valid')(x)
+    x = keras.layers.ConvLSTM2D(64, 2, return_sequences=True,padding = 'same',dropout = cnn_dropout, recurrent_dropout=rnn_dropout)(x)
+    x=keras.layers.TimeDistributed(keras.layers.MaxPooling2D(pool_size=(2, 2)))(x)
     print(x.shape)
     #x = keras.layers.ConvLSTM2D(128, 2, return_sequences=True, padding = 'same')(x)
-    x = keras.layers.ConvLSTM2D(128, 2, return_sequences=True, padding = 'valid')(x)
+    x = keras.layers.ConvLSTM2D(128, 2, return_sequences=True,padding = 'same', dropout = cnn_dropout, recurrent_dropout=rnn_dropout)(x)
+    x=keras.layers.TimeDistributed(keras.layers.MaxPooling2D(pool_size=(2, 2)))(x)
     print(x.shape)
     x = keras.layers.TimeDistributed(keras.layers.Flatten())(x)
     print(x.shape)
@@ -121,7 +158,7 @@ def convgru(n_timesteps = 5, cell_size = 128, input_size = 28,input_dim = 3, con
     print(x.shape)
     x = keras.layers.Flatten()(x)
     print(x.shape)
-    x = keras.layers.Dense(1024,activation="relu")(x)
+    x = keras.layers.Dense(256,activation="relu")(x)
     x = keras.layers.Dense(10,activation="softmax")(x)
     print(x.shape)
     model = keras.models.Model(inputs=[inputA,inputB],outputs=x, name = 'ConvLSTM_{}'.format(concat))
@@ -135,8 +172,7 @@ def convgru(n_timesteps = 5, cell_size = 128, input_size = 28,input_dim = 3, con
     return model
 
 rnn_net = convgru(n_timesteps = sample, cell_size = hidden_size,input_size = res  , concat = True)
-cnn_net = cnn_net = extended_cnn_one_img(n_timesteps = sample, input_size = res)
-
+#%%
 # hp = HP()
 # hp.save_path = 'saved_runs'
 
@@ -151,19 +187,6 @@ train_dataset, test_dataset = create_cifar_dataset(images, labels,res = res,
 
 train_dataset_x, train_dataset_y = split_dataset_xy(train_dataset)
 test_dataset_x, test_dataset_y = split_dataset_xy(test_dataset)
-#%%
-print("##################### Fit {} and trajectories model on training data res = {} ##################".format(cnn_net.name,res))
-cnn_history = cnn_net.fit(
-    train_dataset_x,
-    train_dataset_y,
-    batch_size=64,
-    epochs=epochs,
-    # We pass some validation for
-    # monitoring validation loss and metrics
-    # at the end of each epoch
-    validation_data=(test_dataset_x, test_dataset_y),
-    verbose = 1)
-print('################# {} Validation Accuracy = '.format(cnn_net.name),cnn_history.history['val_sparse_categorical_accuracy'])
 
 #%%
 print("##################### Fit {} and trajectories model on training data res = {} ##################".format(rnn_net.name,res))
@@ -176,7 +199,7 @@ rnn_history = rnn_net.fit(
     # monitoring validation loss and metrics
     # at the end of each epoch
     validation_data=(test_dataset_x, test_dataset_y),
-    verbose = 1)
+    verbose = 0)
 
 #print('################# {} Validation Accuracy = '.format(cnn_net.name),cnn_history.history['val_sparse_categorical_accuracy'])
 #print('################# {} Training Accuracy = '.format(cnn_net.name),rnn_history.history['sparse_categorical_accuracy'])
@@ -189,8 +212,6 @@ print('################# {} Training Accuracy = '.format(rnn_net.name),rnn_histo
 plt.figure()
 plt.plot(rnn_history.history['sparse_categorical_accuracy'], label = 'train')
 plt.plot(rnn_history.history['val_sparse_categorical_accuracy'], label = 'val')
-plt.plot(cnn_history.history['sparse_categorical_accuracy'], label = 'cnn train')
-plt.plot(cnn_history.history['val_sparse_categorical_accuracy'], label = 'cnn val')
 plt.legend()
 plt.title('{} on cifar res = {} hs = {} dropout = {}'.format(rnn_net.name, res, hidden_size,cnn_dropout))
 plt.savefig('{} on Cifar res = {} val accur = {} hs = {} dropout = {}.png'.format(rnn_net.name,res,rnn_history.history['val_sparse_categorical_accuracy'][-1], hidden_size,cnn_dropout))
@@ -198,5 +219,3 @@ plt.savefig('{} on Cifar res = {} val accur = {} hs = {} dropout = {}.png'.forma
 with open('/home/labs/ahissarlab/orra/imagewalker/cifar_net_search/{}HistoryDict{}_{}'.format(rnn_net.name, hidden_size,cnn_dropout), 'wb') as file_pi:
     pickle.dump(rnn_history.history, file_pi)
     
-with open('/home/labs/ahissarlab/orra/imagewalker/cifar_net_search/{}HistoryDict'.format(cnn_net.name), 'wb') as file_pi:
-    pickle.dump(cnn_history.history, file_pi)

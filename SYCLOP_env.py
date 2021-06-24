@@ -6,10 +6,10 @@ from misc import HP
 import cv2
 # cv2.ocl.setUseOpenCL(True)
 
-if sys.version_info.major == 2:
-    import Tkinter as tk
-else:
-    import tkinter as tk
+# if sys.version_info.major == 2:
+#     import Tkinter as tk
+# else:
+#     import tkinter as tk
 
 class Scene():
     def __init__(self,image_matrix = None, frame_list = None ):

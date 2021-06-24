@@ -117,7 +117,7 @@ def teacher_student(feature_teacher = None):
                                    'student_pred': student_pred,},
                         )
     
-    feature_loss = keras.backend.mean(keras.losses.mean_squared_error(teacher_features, student_features))
+    feature_loss = keras.losses.mean_squared_error(teacher_features, student_features)
     model.add_loss(feature_loss)
     model.add_metric(feature_loss, name = 'feature_loss')
     #class_loss = keras.losses.sparse_categorical_crossentropy(labels, student_pred)
