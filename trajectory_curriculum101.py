@@ -12,7 +12,7 @@ import cv2
 import argparse
 import tensorflow.keras as keras
 
-from keras_networks import rnn_model_102
+from keras_networks import rnn_model_102, rnn_model_multicore_201, rnn_model_multicore_202
 from curriculum_utils import create_mnist_dataset, bad_res102
 
 #scheduler function for curriculum:
@@ -84,6 +84,9 @@ parser.add_argument('--eval_dir', default=None, type=str, help='eval dir')
 
 parser.add_argument('--dqn_initial_network', default=None, type=str, help='dqn_initial_network')
 parser.add_argument('--decoder_initial_network', default=None, type=str, help='decoder_initial_network')
+parser.add_argument('--decoder_arch', default='default', type=str, help='decoder_network architecture: default / multicore_201')
+parser.add_argument('--decoder_n_cores',  default=1, type=int, help='decoder number of cores')
+
 parser.add_argument('--decoder_learning_rate',  default=1e-3, type=float, help='decoder learning rate')
 parser.add_argument('--decoder_dropout',  default=0.0, type=float, help='decoder dropout')
 parser.add_argument('--decoder_rnn_type',  default='gru', type=str, help='gru or rnn')
@@ -121,8 +124,12 @@ parser.add_argument('--no-curriculum_enable', dest='curriculum_enable', action='
 parser.add_argument('--conv_fe', dest='conv_fe', action='store_true')
 parser.add_argument('--no-conv_fe', dest='conv_fe', action='store_false')
 
+parser.add_argument('--acceleration_mode', dest='acceleration_mode', action='store_true')
+parser.add_argument('--no-acceleration_mode', dest='acceleration_mode', action='store_false')
 
-parser.set_defaults(eval_mode=False, decode_from_dvs=False,test_mode=False,rising_beta_schedule=True,decoder_ignore_position=False, curriculum_enable=True, conv_fe=False)
+
+parser.set_defaults(eval_mode=False, decode_from_dvs=False,test_mode=False,rising_beta_schedule=True,decoder_ignore_position=False, curriculum_enable=True, conv_fe=False,
+                    acceleration_mode=False)
 
 config = parser.parse_args()
 config = vars(config)
@@ -135,8 +142,19 @@ n_timesteps = hp.steps_per_episode
 ##
 deploy_logs()
 ##
-decoder = rnn_model_102(lr=hp.decoder_learning_rate,ignore_input_B=hp.decoder_ignore_position,dropout=hp.decoder_dropout,rnn_type=hp.decoder_rnn_type,
-                                input_size=(hp.resolution,hp.resolution, 1),rnn_layers=hp.decoder_rnn_layers,conv_fe=hp.conv_fe)
+if hp.decoder_arch == 'multicore_201':
+    decoder = rnn_model_multicore_201(n_cores=hp.decoder_n_cores,lr=hp.decoder_learning_rate,ignore_input_B=hp.decoder_ignore_position,dropout=hp.decoder_dropout,rnn_type=hp.decoder_rnn_type,
+                                input_size=(hp.resolution,hp.resolution, 1),rnn_layers=hp.decoder_rnn_layers,conv_fe=hp.conv_fe, rnn_units=hp.decoder_rnn_units, n_timesteps=hp.steps_per_episode)
+if hp.decoder_arch == 'multicore_202':
+    decoder = rnn_model_multicore_202(n_cores=hp.decoder_n_cores, lr=hp.decoder_learning_rate,
+                                      ignore_input_B=hp.decoder_ignore_position, dropout=hp.decoder_dropout,
+                                      rnn_type=hp.decoder_rnn_type,
+                                      input_size=(hp.resolution, hp.resolution, 1),
+                                      rnn_layers=hp.decoder_rnn_layers, conv_fe=hp.conv_fe,
+                                      rnn_units=hp.decoder_rnn_units, n_timesteps=hp.steps_per_episode)
+elif hp.decoder_arch == 'default':
+    decoder = rnn_model_102(lr=hp.decoder_learning_rate,ignore_input_B=hp.decoder_ignore_position,dropout=hp.decoder_dropout,rnn_type=hp.decoder_rnn_type,
+                                input_size=(hp.resolution,hp.resolution, 1),rnn_layers=hp.decoder_rnn_layers,conv_fe=hp.conv_fe,rnn_units=hp.decoder_rnn_units, n_timesteps=hp.steps_per_episode)
 #define dataset
 (images, labels), (images_test, labels_test) = keras.datasets.mnist.load_data(path="mnist.npz")
 
@@ -149,7 +167,7 @@ alpha=0
 for epoch in range(hp.num_epochs):
     if hp.curriculum_enable:
         if epoch == 0:
-            train_dataset, test_dataset = create_mnist_dataset(images, labels, 6, bad_res_func=bad_res102, return_datasets=True, q_0=0, alpha=1.0,random_trajectories=False)
+            train_dataset, test_dataset = create_mnist_dataset(images, labels, 6,  sample=hp.steps_per_episode,bad_res_func=bad_res102, return_datasets=True, q_0=0, alpha=1.0,random_trajectories=False,acceleration_mode=hp.acceleration_mode)
             train_dataset_x, train_dataset_y = split_dataset_xy(train_dataset)
             test_dataset_x, test_dataset_y = split_dataset_xy(test_dataset)
             q_0=train_dataset_x[1][0]
@@ -158,15 +176,15 @@ for epoch in range(hp.num_epochs):
             alpha += hp.alpha_increment
             alpha = np.minimum(alpha,1.0)
 
-            train_dataset, test_dataset = create_mnist_dataset(images, labels, 6, bad_res_func=bad_res102, return_datasets=True, q_0=q_0, alpha=alpha,random_trajectories=True)
+            train_dataset, test_dataset = create_mnist_dataset(images, labels, 6, sample=hp.steps_per_episode, bad_res_func=bad_res102, return_datasets=True, q_0=q_0, alpha=alpha,random_trajectories=True,acceleration_mode=hp.acceleration_mode)
             train_dataset_x, train_dataset_y = split_dataset_xy(train_dataset)
             test_dataset_x, test_dataset_y = split_dataset_xy(test_dataset)
             q_prime=train_dataset_x[1][0]
             print('epoch',epoch,' alpha',alpha,'first q --', q_prime.reshape([-1]))
     else:
-        train_dataset, test_dataset = create_mnist_dataset(images, labels, 6, bad_res_func=bad_res102,
+        train_dataset, test_dataset = create_mnist_dataset(images, labels, 6, sample=hp.steps_per_episode, bad_res_func=bad_res102,
                                                            return_datasets=True, q_0=0, alpha=1.0,
-                                                           random_trajectories=True)
+                                                           random_trajectories=True,acceleration_mode=hp.acceleration_mode)
         train_dataset_x, train_dataset_y = split_dataset_xy(train_dataset)
         test_dataset_x, test_dataset_y = split_dataset_xy(test_dataset)
         q_prime = train_dataset_x[1][0]
