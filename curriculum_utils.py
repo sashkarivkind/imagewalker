@@ -42,7 +42,7 @@ def bad_res102(img,res):
 
 def create_mnist_dataset(images, labels, res, sample=5, mixed_state=True, add_traject=True, q_0=None, alpha=0,
                          trajectory_list=None,random_trajectories=False, return_datasets=False, add_seed=70000, show_fig=False,
-                         mix_res=False, bad_res_func=None, up_sample=False):
+                         mix_res=False, bad_res_func=None, up_sample=False, acceleration_mode=False):
     #mix_res = False, bad_res_func = bad_res102, up_sample = False):
     '''
     Creates a torch dataloader object of syclop outputs
@@ -115,9 +115,14 @@ def create_mnist_dataset(images, labels, res, sample=5, mixed_state=True, add_tr
             if img_num==0 or random_trajectories:
                 starting_point = np.array([agent.max_q[0] // 2, agent.max_q[1] // 2])
                 steps = []
+                qdot=0
                 for j in range(sample):
                     steps.append(starting_point * 1)
-                    starting_point += np.random.randint(-5, 5, 2)
+                    if acceleration_mode:
+                        qdot += np.random.randint(-1, 2, 2)
+                        starting_point += qdot
+                    else:
+                        starting_point += np.random.randint(-5, 6, 2)
 
                 if mixed_state:
                     q_sequence = np.array(steps).astype(int)
