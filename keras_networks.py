@@ -2,7 +2,8 @@ import tensorflow.keras as keras
 import tensorflow as tf
 
 def time_distributed_xentropy_loss(y_true,y_pred):
-    tt = keras.layers.TimeDistributed(tf.losses.sparse_softmax_cross_entropy(y_true,tf.log(y_pred)))
+    print('debug_shapes:',y_true.shape, y_true.shape,)
+    tt = keras.layers.TimeDistributed(tf.nn.sparse_softmax_cross_entropy_with_logits(logits=tf.log(y_pred),labels=y_true))
     tt = tf.reduce_mean(tt, axis=1) #taking mean along the time dimension
     tt = tf.reduce_mean(tt, axis=0) #taking mean along the batch dimension
     return tt
@@ -51,14 +52,15 @@ def rnn_model_101(n_timesteps=5,lr=1e-3,dropout=0.0,ignore_input_B=False,rnn_typ
     )
     return model
 
-def rnn_model_102(n_timesteps=5,lr=1e-3,dropout=0.0,ignore_input_B=False,rnn_type='gru',rnn_layers=1,input_size=(28,28,1),conv_fe=False,rnn_units=100, **kwargs):
+def rnn_model_102(n_timesteps=5,lr=1e-3,dropout=0.0,ignore_input_B=False,rnn_type='gru',rnn_layers=1,input_size=(28,28,1),conv_fe=False, rnn_units = 100):
+
     inputA = keras.layers.Input(shape=(n_timesteps,)+input_size)
     inputB = keras.layers.Input(shape=(n_timesteps,2))
 
     if conv_fe:
     # define CNN model
-        x1=keras.layers.TimeDistributed(keras.layers.Conv2D(16,(3,3),activation='relu'))(inputA)
-        x1=keras.layers.TimeDistributed(keras.layers.BatchNormalization())(x1)
+        x1=keras.layers.TimeDistributed(keras.layers.Conv2D(8,(3,3),activation='relu'))(inputA)
+#         x1=keras.layers.TimeDistributed(keras.layers.BatchNormalization())(x1)
         x1=keras.layers.TimeDistributed(keras.layers.MaxPooling2D(pool_size=(2, 2)))(x1)
 
         x1=keras.layers.TimeDistributed(keras.layers.Flatten())(x1)
@@ -72,6 +74,7 @@ def rnn_model_102(n_timesteps=5,lr=1e-3,dropout=0.0,ignore_input_B=False,rnn_typ
 
     for ll in range(rnn_layers):
         return_sequence = ll+1 < rnn_layers
+#         return_sequence = True
         print('debu return sequence',return_sequence)
         if rnn_type=='gru':
             x = keras.layers.GRU(rnn_units,input_shape=(n_timesteps, None),return_sequences=return_sequence)(x)
@@ -81,13 +84,14 @@ def rnn_model_102(n_timesteps=5,lr=1e-3,dropout=0.0,ignore_input_B=False,rnn_typ
             error
 
     x = keras.layers.Dropout(dropout)(x)
-
+#     x = keras.layers.TimeDistributed(keras.layers.Dense(10,activation="softmax"))(x)
     x = keras.layers.Dense(10,activation="softmax")(x)
     model = keras.models.Model(inputs=[inputA,inputB],outputs=x)
     opt=keras.optimizers.Adam(lr=lr)
 
     model.compile(
         optimizer=opt,
+#         loss=time_distributed_xentropy_loss,
         loss="sparse_categorical_crossentropy",
         metrics=["sparse_categorical_accuracy"],
     )
