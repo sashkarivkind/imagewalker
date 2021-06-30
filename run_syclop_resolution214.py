@@ -264,6 +264,8 @@ if __name__ == "__main__":
     parser.add_argument('--no-decoder_ignore_position', dest='decoder_ignore_position', action='store_false')
 
     parser.add_argument('--syclop_learning_rate',  default=2.5e-3, type=float, help='syclop (RL) learning rate')
+    parser.add_argument('--up_to_img_num',  default=0, type=int, help='images for syclop to play with, when 0 - all dataset is taken ')
+
 
     parser.add_argument('--color', default='grayscale', type=str, help='grayscale/rgb')
     parser.add_argument('--speed_reward',  default=0.0, type=float, help='speed reward, typically negative')
@@ -334,6 +336,10 @@ if __name__ == "__main__":
     (images, labels), (images_test,labels_test) = keras.datasets.mnist.load_data(path="mnist.npz")
     if hp.test_mode or hp.eval_mode:
         (images, labels) = (images_test, labels_test)
+    if hp.up_to_img_num > 0:
+        (images, labels) = (images[:hp.up_to_img_num], labels[:hp.up_to_img_num])
+        print('debug-------------------------------------',np.shape(images))
+
     img = build_mnist_padded(1. / 256 * np.reshape(images[0], [1, 28, 28])) #just to initialize scene with correct size
 
     scene = syc.Scene(image_matrix=img)
