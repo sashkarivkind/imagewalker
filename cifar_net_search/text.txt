@@ -1,0 +1,7 @@
+some text file
+Now the file has more content!
+{'epochs': 1, 'sample': 5, 'res': 8, 'hidden_size': 128, 'concat': 1, 'regularizer': None, 'cnn_dropout': 0.4, 'rnn_dropout': 0.2, 'lr': 0.0005}
+############################
+############################
+############################
+#############44444##########
