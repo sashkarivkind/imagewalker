@@ -25,6 +25,11 @@ sys.argv gets:
 [3] = number of epochs
 [4] = resolution factor
 
+traject = 5 - out.418713 5 200 3 8 20
+
+
+traject = 1 - out.418730 1 200 3 8 20
+
 """
 
 import numpy as np

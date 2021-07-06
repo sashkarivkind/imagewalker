@@ -57,6 +57,17 @@ with cnn_dropout = 0.4 and rnn dropout = 0.2 and lr = 5e-4 with res = 8 with 10 
 
 with cnn_dropout = 0.4 and rnn dropout = 0.2 and lr = 5e-4 with res = 8 with 10 samples and 500 epochs, hs = 256 out.850588
 
+200 20 8 256 1 3 0
+out.418207
+
+200 20 8 256 1 0 0
+out.418221
+
+50 20 8 256 1 0 0
+out.418247
+
+
+
 '''
 
 from __future__ import division, print_function, absolute_import
@@ -101,39 +112,72 @@ def bad_res102(img,res):
 # from misc import Logger
 import os 
 
+kernel_regularizer_list = [None, keras.regularizers.l1(),keras.regularizers.l2(),keras.regularizers.l1_l2()]
+optimizer_list = [tf.keras.optimizers.Adam, tf.keras.optimizers.Nadam, tf.keras.optimizers.RMSprop]
+if len(sys.argv) > 1:
+    paramaters = {
+    'epochs' : int(sys.argv[1]),
+    
+    'sample' : int(sys.argv[2]),
+    
+    'res' : int(sys.argv[3]),
+    
+    'hidden_size' : int(sys.argv[4]),
+    
+    'concat' : int(sys.argv[5]),
+    
+    'regularizer' : kernel_regularizer_list[int(sys.argv[6])],
+    
+    'optimizer' : optimizer_list[int(sys.argv[7])],
+    
+    'cnn_dropout' : 0.4,
 
-# def deploy_logs():
-#     if not os.path.exists(hp.save_path):
-#         os.makedirs(hp.save_path)
+    'rnn_dropout' : 0.2,
 
-#     dir_success = False
-#     for sfx in range(1):  # todo legacy
-#         candidate_path = hp.save_path + '/' + hp.this_run_name + '_' + str(os.getpid()) + '/'
-#         if not os.path.exists(candidate_path):
-#             hp.this_run_path = candidate_path
-#             os.makedirs(hp.this_run_path)
-#             dir_success = Truecnn_net = cnn_one_img(n_timesteps = sample, input_size = 28, input_dim = 1)
-#             break
-#     if not dir_success:
-#         error('run name already exists!')
+    'lr' : 5e-4,
+    
+    'run_id' : np.random.randint(1000,9000)
+    }
+    
+else:
+    paramaters = {
+    'epochs' : 1,
+    
+    'sample' : 5,
+    
+    'res' : 8,
+    
+    'hidden_size' : 128,
+    
+    'concat' : 1,
+    
+    'regularizer' : None,
+    
+    'optimizer' : optimizer_list[0],
+    
+    'cnn_dropout' : 0.4,
 
-#     sys.stdout = Logger(hp.this_run_path+'log.log')
-#     print('results are in:', hp.this_run_path)
-#     print('description: ', hp.description)
-    #print('hyper-parameters (partial):', hp.dict)
+    'rnn_dropout' : 0.2,
 
-epochs = int(sys.argv[1])
-
-sample = int(sys.argv[2])
-
-res = int(sys.argv[3])
-
-hidden_size = int(sys.argv[4])
+    'lr' : 5e-4,
+    
+    'run_id' : np.random.randint(1000,9000)
+    }
    
-cnn_dropout = 0.4
-
-rnn_dropout = 0.2
-
+print(paramaters)
+for key,val in paramaters.items():
+    exec(key + '=val')
+epochs = epochs
+sample = sample 
+res = res 
+hidden_size =hidden_size
+concat = concat
+regularizer = regularizer
+optimizer = optimizer
+cnn_dropout = cnn_dropout
+rnn_dropout = rnn_dropout
+lr = lr
+run_id = run_id
 n_timesteps = sample
 def split_dataset_xy(dataset):
     dataset_x1 = [uu[0] for uu in dataset]
@@ -265,12 +309,15 @@ plt.plot(rnn_history.history['val_sparse_categorical_accuracy'], label = 'val')
 # plt.plot(cnn_history.history['sparse_categorical_accuracy'], label = 'cnn train')
 # plt.plot(cnn_history.history['val_sparse_categorical_accuracy'], label = 'cnn val')
 plt.legend()
+plt.grid()
 plt.title('{} on cifar res = {} hs = {} dropout = {} num samples = {}'.format(rnn_net.name, res, hidden_size,cnn_dropout, sample))
 plt.savefig('{} on Cifar res = {}, no upsample, val accur = {} hs = {} dropout = {}.png'.format(rnn_net.name,res,rnn_history.history['val_sparse_categorical_accuracy'][-1], hidden_size,cnn_dropout))
 
 with open('/home/labs/ahissarlab/orra/imagewalker/cifar_net_search/{}HistoryDict{}_{}'.format(rnn_net.name, hidden_size,cnn_dropout), 'wb') as file_pi:
     pickle.dump(rnn_history.history, file_pi)
     
-# with open('/home/labs/ahissarlab/orra/imagewalker/cifar_net_search/{}HistoryDict'.format(cnn_net.name), 'wb') as file_pi:
-#     pickle.dump(cnn_history.history, file_pi)
+
+dataset_update(rnn_history, rnn_net,paramaters)    
+write_to_file(rnn_history, rnn_net,paramaters)    
+    
     

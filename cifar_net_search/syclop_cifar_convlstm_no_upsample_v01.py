@@ -15,6 +15,10 @@ cnn_dropout = 0.4 rnn_dropout = 0.2 , WITH cnivlstm_dropout samples = 10, h = 25
 
 ################# convlstm_cnn_mix_v0_True Validation Accuracy =  [0.3555999994277954, 0.37619999051094055, 0.4235999882221222, 0.4275999963283539, 0.46779999136924744, 0.4819999933242798, 0.48980000615119934, 0.4968000054359436, 0.5194000005722046, 0.5131999850273132, 0.5242000222206116, 0.5284000039100647, 0.5144000053405762, 0.5365999937057495, 0.5465999841690063, 0.5496000051498413, 0.5407999753952026, 0.5626000165939331, 0.5573999881744385, 0.5558000206947327, 0.5586000084877014, 0.5645999908447266, 0.5717999935150146, 0.569599986076355, 0.5727999806404114, 0.5630000233650208, 0.571399986743927, 0.5580000281333923, 0.5852000117301941, 0.5753999948501587, 0.5738000273704529, 0.579200029373169, 0.5726000070571899, 0.5789999961853027, 0.5648000240325928, 0.5776000022888184, 0.5763999819755554, 0.5799999833106995, 0.58160001039505, 0.5839999914169312, 0.5860000252723694, 0.5834000110626221, 0.5825999975204468, 0.5860000252723694, 0.5807999968528748, 0.5831999778747559, 0.5789999961853027, 0.5758000016212463, 0.58160001039505, 0.5807999968528748]
 ################# convlstm_cnn_mix_v0_True Training Accuracy =  [0.25715556740760803, 0.36764445900917053, 0.4077777862548828, 0.4264444410800934, 0.4399999976158142, 0.4568444490432739, 0.46862220764160156, 0.4764222204685211, 0.4854666590690613, 0.4959777891635895, 0.5049999952316284, 0.5096889138221741, 0.5180666446685791, 0.5244666934013367, 0.5313777923583984, 0.536133348941803, 0.5363110899925232, 0.5413333177566528, 0.549311101436615, 0.5522222518920898, 0.557022213935852, 0.5595999956130981, 0.563955545425415, 0.5663999915122986, 0.5641111135482788, 0.5719777941703796, 0.5754444599151611, 0.5798222422599792, 0.580644428730011, 0.5836222171783447, 0.5849555730819702, 0.586222231388092, 0.5915555357933044, 0.594355583190918, 0.5944888591766357, 0.5996444225311279, 0.6037111282348633, 0.6028888821601868, 0.6078444719314575, 0.6094889044761658, 0.6093555688858032, 0.6102889180183411, 0.6134666800498962, 0.6152889132499695, 0.6180889010429382, 0.6205999851226807, 0.6215111017227173, 0.6247333288192749, 0.6240666508674622, 0.6295999884605408]
+
+with 20 samples and epochs = 50, h=128, out.980236
+
+with 20 samples and epochs = 50, h=256, out.980276
 '''
 
 from __future__ import division, print_function, absolute_import
@@ -58,31 +62,8 @@ def bad_res102(img,res):
     dwnsmp=cv2.resize(img,res, interpolation = cv2.INTER_AREA)
     return dwnsmp
 
-# import importlib
-# importlib.reload(misc)
-# from misc import Logger
-# import os 
-
-
-# def deploy_logs():
-#     if not os.path.exists(hp.save_path):
-#         os.makedirs(hp.save_path)
-
-#     dir_success = False
-#     for sfx in range(1):  # todo legacy
-#         candidate_path = hp.save_path + '/' + hp.this_run_name + '_' + str(os.getpid()) + '/'
-#         if not os.path.exists(candidate_path):
-#             hp.this_run_path = candidate_path
-#             os.makedirs(hp.this_run_path)
-#             dir_success = Truecnn_net = cnn_one_img(n_timesteps = sample, input_size = 28, input_dim = 1)
-#             break
-#     if not dir_success:
-#         error('run name already exists!')
-
-#     sys.stdout = Logger(hp.this_run_path+'log.log')
-#     print('results are in:', hp.this_run_path)
-#     print('description: ', hp.description)
-#     #print('hyper-parameters (partial):', hp.dict)
+kernel_regularizer_list = [None, keras.regularizers.l1(),keras.regularizers.l2(),keras.regularizers.l1_l2()]
+optimizer_list = [tf.keras.optimizers.Adam, tf.keras.optimizers.Nadam, tf.keras.optimizers.RMSprop]
 if len(sys.argv) > 1:
     paramaters = {
     'epochs' : int(sys.argv[1]),
@@ -93,11 +74,19 @@ if len(sys.argv) > 1:
     
     'hidden_size' : int(sys.argv[4]),
     
+    'concat' : int(sys.argv[5]),
+    
+    'regularizer' : keras.regularizers.l1(),#kernel_regularizer_list[int(sys.argv[6])],
+    
+    'optimizer' : optimizer_list[int(sys.argv[7])],
+    
     'cnn_dropout' : 0.4,
 
     'rnn_dropout' : 0.2,
 
-    'lr' : 5e-4
+    'lr' : 5e-4,
+    
+    'run_id' : np.random.randint(1000,9000)
     }
     
 else:
@@ -110,17 +99,38 @@ else:
     
     'hidden_size' : 128,
     
+    'concat' : 1,
+    
+    'regularizer' : None,
+    
+    'optimizer' : optimizer_list[0],
+    
     'cnn_dropout' : 0.4,
 
     'rnn_dropout' : 0.2,
 
-    'lr' : 5e-4
-    }
+    'lr' : 5e-4,
     
+    'run_id' : np.random.randint(1000,9000)
+    }
+   
 print(paramaters)
 for key,val in paramaters.items():
     exec(key + '=val')
+epochs = epochs
+sample = sample 
+res = res 
+hidden_size =hidden_size
+concat = concat
+regularizer = regularizer
+optimizer = optimizer
+cnn_dropout = cnn_dropout
+rnn_dropout = rnn_dropout
+lr = lr
+run_id = run_id
 n_timesteps = sample
+
+
 def split_dataset_xy(dataset):
     dataset_x1 = [uu[0] for uu in dataset]
     dataset_x2 = [uu[1] for uu in dataset]
@@ -248,4 +258,6 @@ with open('/home/labs/ahissarlab/orra/imagewalker/cifar_net_search/{}HistoryDict
     
 # with open('/home/labs/ahissarlab/orra/imagewalker/cifar_net_search/{}HistoryDict'.format(cnn_net.name), 'wb') as file_pi:
 #     pickle.dump(cnn_history.history, file_pi)
+dataset_update(rnn_history, rnn_net,paramaters)    
+write_to_file(rnn_history, rnn_net,paramaters)    
     

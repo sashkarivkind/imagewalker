@@ -102,31 +102,7 @@ def bad_res102(img,res):
     dwnsmp=cv2.resize(img,res, interpolation = cv2.INTER_AREA)
     return dwnsmp
 
-# import importlib
-# importlib.reload(misc)
-# from misc import Logger
-# import os 
 
-
-# def deploy_logs():
-#     if not os.path.exists(hp.save_path):
-#         os.makedirs(hp.save_path)
-
-#     dir_success = False
-#     for sfx in range(1):  # todo legacy
-#         candidate_path = hp.save_path + '/' + hp.this_run_name + '_' + str(os.getpid()) + '/'
-#         if not os.path.exists(candidate_path):
-#             hp.this_run_path = candidate_path
-#             os.makedirs(hp.this_run_path)
-#             dir_success = Truecnn_net = cnn_one_img(n_timesteps = sample, input_size = 28, input_dim = 1)
-#             break
-#     if not dir_success:
-#         error('run name already exists!')
-
-#     sys.stdout = Logger(hp.this_run_path+'log.log')
-#     print('results are in:', hp.this_run_path)
-#     print('description: ', hp.description)
-#     #print('hyper-parameters (partial):', hp.dict)
 kernel_regularizer_list = [None, keras.regularizers.l1(),keras.regularizers.l2(),keras.regularizers.l1_l2()]
 optimizer_list = [tf.keras.optimizers.Adam, tf.keras.optimizers.Nadam, tf.keras.optimizers.RMSprop]
 if len(sys.argv) > 1:

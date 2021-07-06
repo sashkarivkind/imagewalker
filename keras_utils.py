@@ -277,14 +277,13 @@ def create_cifar_dataset(images, labels, res, sample = 5, mixed_state = True, ad
     dvs_images = []
     q_seq = []
     count = 0
-    rnd = np.random.RandomState(100)
     if show_fig:
         #create subplot to hold examples from the dataset
         fig, ax = plt.subplots(2,5)
         i = 0 #indexises for the subplot for image and for syclop vision
     for img_num,img in enumerate(images):
         if add_seed:
-            np.random.seed(rnd.randint(1,20))
+            np.random.seed(random.randint(0,add_seed))    
         orig_img = img*1
         #Set the padded image
         img=misc.build_cifar_padded(1./256*img)

@@ -18,6 +18,9 @@ out.440443 FAILED
 Trying a smaller network [64,64]
 
 
+added regular cnn after the convlstm 
+and that the dept of the convlstm and cnn = hidden_size, out.984250
+
 '''
 
 from __future__ import division, print_function, absolute_import
@@ -165,17 +168,13 @@ def convgru(n_timesteps = 5, cell_size = 128, input_size = 28,input_dim = 3, con
     inputB = keras.layers.Input(shape=(n_timesteps,2))
     
     # define LSTM model
-    x = keras.layers.ConvLSTM2D(32, 3, return_sequences=True,padding = 'same',
+    x = keras.layers.ConvLSTM2D(cell_size, 3, return_sequences=True,padding = 'same',
                                 dropout = cnn_dropout, recurrent_dropout=rnn_dropout,
                                 kernel_regularizer=regularizer,)(inputA)
     #x = keras.layers.ConvLSTM2D(32, 3, return_sequences=True, padding = 'valid')(x)
     print(x.shape)
-
-    #x=keras.layers.TimeDistributed(keras.layers.MaxPooling2D(pool_size=(2, 2)))(x)
-    print(x.shape)
-    #x = keras.layers.ConvLSTM2D(128, 2, return_sequences=True, padding = 'same')(x)
-    #x = keras.layers.ConvLSTM2D(128, 2, return_sequences=True,padding = 'same', dropout = cnn_dropout, recurrent_dropout=rnn_dropout)(x)
-    #x=keras.layers.TimeDistributed(keras.layers.MaxPooling2D(pool_size=(2, 2)))(x)
+    x = keras.layers.TimeDistributed(keras.layers.Conv2D(cell_size,(3,3),activation='relu', padding = 'same'))(x)
+    x=keras.layers.TimeDistributed(keras.layers.MaxPooling2D(pool_size=(2, 2)))(x)
     print(x.shape)
     x = keras.layers.TimeDistributed(keras.layers.Flatten())(x)
     print(x.shape)
@@ -184,7 +183,8 @@ def convgru(n_timesteps = 5, cell_size = 128, input_size = 28,input_dim = 3, con
     print(x.shape)
     x = keras.layers.Flatten()(x)
     print(x.shape)
-    x = keras.layers.Dense(256,activation="relu")(x)
+    x = keras.layers.Dense(1024,activation="relu")(x)
+    print(x.shape)
     x = keras.layers.Dense(10,activation="softmax")(x)
     print(x.shape)
     model = keras.models.Model(inputs=[inputA,inputB],outputs=x, name = 'one_layer_convlstm_{}'.format(concat))
