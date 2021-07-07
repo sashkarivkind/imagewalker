@@ -16,17 +16,17 @@ class LossClass(keras.layers.Layer):
       return self.total
 
 
-def time_distributed_xentropy_loss(y_true,y_pred):
+def time_distributed_xentropy_loss(y_true,y_pred,n_timesteps=None):
     # y_true = K.reshape(y_true, (K.shape(y_true)[0], -1))
-    y_true = keras.layers.Reshape((5,))(y_true)
+    y_true = keras.layers.Reshape((n_timesteps,))(y_true)
     y_true = tf.cast(y_true, tf.int32)
     tt= tf.nn.sparse_softmax_cross_entropy_with_logits(labels=y_true, logits=tf.log(y_pred))
     tt=tf.reduce_mean(tt)
     return tt
 
-def time_distributed_accuracy(y_true,y_pred):
+def time_distributed_accuracy(y_true,y_pred,n_timesteps=None):
     # y_true = K.reshape(y_true, (K.shape(y_true)[0], -1))
-    y_true = keras.layers.Reshape((5,))(y_true)
+    y_true = keras.layers.Reshape((n_timesteps,))(y_true)
     y_true = tf.cast(y_true, tf.int64)
     print('debug_shapes:', np.shape(y_pred))
     print('debug_shapes:', np.shape(tf.argmax(y_pred,axis=-1)))
@@ -34,9 +34,9 @@ def time_distributed_accuracy(y_true,y_pred):
     tt=tf.reduce_mean(tf.cast(tt,"float"))
     return tt
 
-def time_distributed_accuracy_last_step(y_true,y_pred):
+def time_distributed_accuracy_last_step(y_true,y_pred,n_timesteps=None):
     # y_true = K.reshape(y_true, (K.shape(y_true)[0], -1))
-    y_true = keras.layers.Reshape((5,))(y_true)
+    y_true = keras.layers.Reshape((n_timesteps,))(y_true)
     y_true = tf.cast(y_true, tf.int64)
     print('debug_shapes:', np.shape(y_pred))
     print('debug_shapes:', np.shape(tf.argmax(y_pred,axis=-1)))
@@ -324,7 +324,6 @@ def convlstm_v2(n_timesteps = 5, cell_size = 128, input_size = 28,input_dim = 1,
 def rnn_model_102e(n_timesteps=5,lr=1e-3,dropout=0.0,ignore_input_B=False,rnn_type='gru',rnn_layers=1,input_size=(28,28,1),conv_fe=False,rnn_units=100, **kwargs):
     inputA = keras.layers.Input(shape=(n_timesteps,)+input_size)
     inputB = keras.layers.Input(shape=(n_timesteps,2))
-
     if conv_fe:
     # define CNN model
         x1=keras.layers.TimeDistributed(keras.layers.Conv2D(16,(3,3),activation='relu'))(inputA)
@@ -356,9 +355,28 @@ def rnn_model_102e(n_timesteps=5,lr=1e-3,dropout=0.0,ignore_input_B=False,rnn_ty
     model = keras.models.Model(inputs=[inputA,inputB],outputs=x)
     opt=keras.optimizers.Adam(lr=lr)
 
+    # time_distributed_accuracy_ = lambda y1,y2: time_distributed_accuracy(y1,y2,n_timesteps=n_timesteps)
+    # time_distributed_accuracy_last_step_ = lambda y1,y2: time_distributed_accuracy_last_step(y1,y2,n_timesteps=n_timesteps)
+    #warpers for optional parameter
+    def time_distributed_xentropy_loss_(y1,y2):
+        print('debug ___________________time_distributed_xentropy_loss___________________ ', n_timesteps)
+        return time_distributed_xentropy_loss(y1,y2,n_timesteps=n_timesteps)
+    def time_distributed_accuracy_(y1,y2):
+        print('debug __________________time_distributed_accuracy____________________ ', n_timesteps)
+        return time_distributed_accuracy(y1,y2,n_timesteps=n_timesteps)
+    def time_distributed_accuracy_last_step_(y1,y2):
+        print('debug _________________time_distributed_accuracy_last_step_____________________ ', n_timesteps)
+        return time_distributed_accuracy_last_step(y1,y2,n_timesteps=n_timesteps)
+
     model.compile(
         optimizer=opt,
-        loss=time_distributed_xentropy_loss,
-        metrics=[time_distributed_accuracy, time_distributed_accuracy_last_step],
+        loss=time_distributed_xentropy_loss_,
+        metrics=[time_distributed_accuracy_, time_distributed_accuracy_last_step_],
     )
+    #
+    # model.compile(
+    #     optimizer=opt,
+    #     loss=time_distributed_xentropy_loss_,
+    #     metrics=[time_distributed_accuracy_last_step_],
+    # )
     return model
