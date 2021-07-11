@@ -24,6 +24,7 @@ def time_distributed_xentropy_loss(y_true,y_pred,n_timesteps=None):
     tt=tf.reduce_mean(tt)
     return tt
 
+
 def time_distributed_accuracy(y_true,y_pred,n_timesteps=None):
     # y_true = K.reshape(y_true, (K.shape(y_true)[0], -1))
     y_true = keras.layers.Reshape((n_timesteps,))(y_true)
@@ -122,7 +123,10 @@ def rnn_model_102(n_timesteps=5,lr=1e-3,dropout=0.0,ignore_input_B=False,rnn_typ
     x = keras.layers.Dropout(dropout)(x)
 #     x = keras.layers.TimeDistributed(keras.layers.Dense(10,activation="softmax"))(x)
     x = keras.layers.Dense(10,activation="softmax")(x)
-    model = keras.models.Model(inputs=[inputA,inputB],outputs=x)
+    if ignore_input_B:
+        model = keras.models.Model(inputs=inputA,outputs=x)
+    else:
+        model = keras.models.Model(inputs=[inputA,inputB],outputs=x)
     opt=keras.optimizers.Adam(lr=lr)
 
     model.compile(

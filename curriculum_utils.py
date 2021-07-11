@@ -9,10 +9,10 @@ import cv2
 import misc
 from RL_networks import Stand_alone_net
 import pickle
-import pandas as pd
+# import pandas as pd
 import random
 
-from sklearn.metrics import confusion_matrix
+# from sklearn.metrics import confusion_matrix
 
 import importlib
 importlib.reload(misc)
