@@ -8,11 +8,9 @@ import numpy as np
 import cv2
 import misc
 from RL_networks import Stand_alone_net
-import pickle
 import pandas as pd
 import random
-
-from sklearn.metrics import confusion_matrix
+import os 
 
 import importlib
 importlib.reload(misc)
@@ -279,14 +277,13 @@ def create_cifar_dataset(images, labels, res, sample = 5, mixed_state = True, ad
     dvs_images = []
     q_seq = []
     count = 0
-    rnd = np.random.RandomState(100)
     if show_fig:
         #create subplot to hold examples from the dataset
         fig, ax = plt.subplots(2,5)
         i = 0 #indexises for the subplot for image and for syclop vision
     for img_num,img in enumerate(images):
         if add_seed:
-            np.random.seed(rnd.randint(1,20))
+            np.random.seed(random.randint(0,add_seed))    
         orig_img = img*1
         #Set the padded image
         img=misc.build_cifar_padded(1./256*img)
@@ -325,7 +322,8 @@ def create_cifar_dataset(images, labels, res, sample = 5, mixed_state = True, ad
         imim=[]
         dimim=[]
         agent.set_manual_trajectory(manual_q_sequence=q_sequence)
-        #Run Syclop for 20 time steps
+        #Run Syclop for 20 time stepsבצדק זה היה ממש לא מתחשב!!
+
         for t in range(len(q_sequence)):
             agent.manual_act()
             sensor.update(scene, agent)
@@ -421,6 +419,61 @@ def mnist_split_dataset_xy(dataset):
     dataset_y = [uu[-1] for uu in dataset]
     return (np.array(dataset_x1)[...,np.newaxis],np.array(dataset_x2)[:,:n_timesteps,:]),np.array(dataset_y)
 
+def split_dataset_xy(dataset,sample):
+    dataset_x1 = [uu[0] for uu in dataset]
+    dataset_x2 = [uu[1] for uu in dataset]
+    dataset_y = [uu[-1] for uu in dataset]
+    return (np.array(dataset_x1)[...,np.newaxis],np.array(dataset_x2)[:,:sample,:]),np.array(dataset_y)
+
+
+def write_to_file(history, net,paramaters):
+    file_name = 'summary_file_{}.txt'.format(net.name)
+    if os.path.isfile('/home/labs/ahissarlab/orra/imagewalker/cifar_net_search/{}'.format(file_name)):
+        file = open('/home/labs/ahissarlab/orra/imagewalker/cifar_net_search/{}'.format(file_name), 'a')
+    else:
+        file = open('/home/labs/ahissarlab/orra/imagewalker/cifar_net_search/{}'.format(file_name), 'x')
+        
+    
+    from datetime import datetime
+    file.write('#####################\n')
+    now = datetime.now()
+    now = now.strftime("%d/%m/%Y %H:%M:%S")
+    file.write(now + '\n')
+    file.write(str(paramaters) + "\n")
+    max_test = max(history.history['val_sparse_categorical_accuracy'])
+    max_location = np.argmax(history.history['val_sparse_categorical_accuracy'])
+    mean_last_20 = np.mean(history.history['val_sparse_categorical_accuracy'][-20:])
+    max_train = max((history.history['sparse_categorical_accuracy']))
+    when_train_reached_test_max = np.where(np.array(history.history['sparse_categorical_accuracy']) > max_test )
+    if len(when_train_reached_test_max)>1:
+        when_train_reached_test_max = when_train_reached_test_max[0]
+    summary_of_run = "max_test = {}, max_location = {}, mean_last_20 = {}, max_train = {}, when_train_reached_test_max = {}\n".\
+                        format(max_test,max_location,mean_last_20,max_train,when_train_reached_test_max)
+        
+    file.write(summary_of_run)
+    file.close()
+
+def dataset_update(history, net, parameters):
+    file_name = 'summary_dataframe_{}.pkl'.format(net.name)
+    if os.path.isfile('/home/labs/ahissarlab/orra/imagewalker/cifar_net_search/{}'.format(file_name)):
+        dataframe = pd.read_pickle('/home/labs/ahissarlab/orra/imagewalker/cifar_net_search/{}'.format(file_name))
+    else:
+        dataframe = pd.DataFrame()
+    
+    values_to_add = parameters
+    values_to_add['max_test'] = max(history.history['val_sparse_categorical_accuracy'])
+    values_to_add['max_location'] = np.argmax(history.history['val_sparse_categorical_accuracy'])
+    values_to_add['mean_last_20'] = np.mean(history.history['val_sparse_categorical_accuracy'][-20:])
+    values_to_add['max_train'] = max((history.history['sparse_categorical_accuracy']))
+    values_to_add['when_train_reached_test_max'] = np.where(np.array(history.history['sparse_categorical_accuracy']) > parameters["max_test"] )
+    if len(values_to_add['when_train_reached_test_max'])>1:
+        values_to_add['when_train_reached_test_max'] = values_to_add['when_train_reached_test_max'][0]
+        
+    
+    dataframe = dataframe.append(values_to_add, ignore_index = True)
+
+    dataframe.to_pickle('/home/labs/ahissarlab/orra/imagewalker/cifar_net_search/{}'.format(file_name))
+    
 #######################################################################################################################
 ############################### KERAS NETWORKS ########################################################################
 ###############################                #####################################(base) orram@orram-Latitude-3400:~$ scp /home/orram/Docum###################################
@@ -746,7 +799,8 @@ def extended_cnn_one_img(n_timesteps = 5, input_size = 32 ,dropout = 0.2):
     inputB = keras.layers.Input(shape=(n_timesteps,2))
     print(inputA[:,0,:,:,:].shape)
     # define CNN model
-    x1=keras.layers.Conv2D(32,(3,3),activation='relu', padding = 'same')(inputA[:,0,:,:,:])
+    index = np.random.randint(0,n_timesteps)
+    x1=keras.layers.Conv2D(32,(3,3),activation='relu', padding = 'same')(inputA[:,index,:,:,:])
     print(x1.shape)
     x1=keras.layers.Conv2D(32,(3,3),activation='relu', padding = 'same')(x1)
     x1=keras.layers.MaxPooling2D(pool_size=(2, 2))(x1)
