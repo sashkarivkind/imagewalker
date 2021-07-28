@@ -7,7 +7,6 @@ from __future__ import division, print_function, absolute_import
 import numpy as np
 import cv2
 import misc
-from RL_networks import Stand_alone_net
 import pandas as pd
 import random
 import os 
@@ -15,7 +14,7 @@ import os
 import importlib
 importlib.reload(misc)
 
-from mnist import MNIST
+
 
 import matplotlib.pyplot as plt
 import SYCLOP_env as syc
@@ -252,8 +251,8 @@ def create_mnist_dataset(images, labels, res, sample = 5, mixed_state = True, ad
 
     
 #The Dataset formation
-def create_cifar_dataset(images, labels, res, sample = 5, mixed_state = True, add_traject = True,
-                   trajectory_list=None,return_datasets=False, add_seed = True, show_fig = False,
+def print_traject(images, labels, res, sample = 5, mixed_state = True, add_traject = True,
+                   trajectory_list=0,return_datasets=False, add_seed = True, show_fig = False,
                    bad_res_func = bad_res102, up_sample = False):
     '''
     Creates a torch dataloader object of syclop outputs 
@@ -302,7 +301,9 @@ def create_cifar_dataset(images, labels, res, sample = 5, mixed_state = True, ad
             sensor = syc.Sensor(winx=56,winy=56,centralwinx=res//2,centralwiny=res//2,nchannels = 3,resolution_fun = lambda x: bad_res102(x,(res,res)), resolution_fun_type = 'down')
         agent = syc.Agent(max_q = [scene.maxx-sensor.hp.winx,scene.maxy-sensor.hp.winy])
         #Setting the coordinates to visit
-        if trajectory_list is None:
+        if type(trajectory_list) is int:
+            if trajectory_list:
+                np.random.seed(trajectory_list)
             starting_point = np.array([agent.max_q[0]//2,agent.max_q[1]//2])
             steps  = []
             for j in range(sample):
@@ -316,8 +317,82 @@ def create_cifar_dataset(images, labels, res, sample = 5, mixed_state = True, ad
                     q_sequence = np.array(steps).astype(int)
         else:
             q_sequence = np.array(trajectory_list[img_num]).astype(int)
+
         if count == 0 :
             print(q_sequence.shape)
+        print(q_sequence)
+        
+        
+def create_cifar_dataset(images, labels, res, sample = 5, mixed_state = True, add_traject = True,
+                   trajectory_list=0,return_datasets=False, add_seed = True, show_fig = False,
+                   bad_res_func = bad_res102, up_sample = False):
+    '''
+    Creates a torch dataloader object of syclop outputs 
+    from a list of images and labels.
+    
+    Parameters
+    ----------
+    images : List object holding the images to proces
+    labels : List object holding the labels
+    res : resolution dawnsampling factor - to be used in cv.resize(orig_img, res)
+    sample: the number of samples to have in syclop
+    mixed_state : if False, use the same trajectory on every image.
+    return_datasets: rerutns datasets rather than dataloaders
+    Returns
+    -------
+    train_dataloader, test_dataloader - torch DataLoader class objects
+
+    '''
+    count = 0
+    ts_images = []
+    dvs_images = []
+    q_seq = []
+    count = 0
+    if show_fig:
+        #create subplot to hold examples from the dataset
+        fig, ax = plt.subplots(2,5)
+        i = 0 #indexises for the subplot for image and for syclop vision
+    for img_num,img in enumerate(images):
+        if add_seed:
+            np.random.seed(random.randint(0,add_seed))    
+        orig_img = img*1
+        #Set the padded image
+        img=misc.build_cifar_padded(1./256*img)
+        img_size = img.shape
+        if img_num == 42:
+            print('Are we Random?? ', np.random.randint(1,20))
+        if show_fig:
+            if count < 5:
+                ax[0,i].imshow(orig_img) 
+                plt.title(labels[count])
+        #Set the sensor and the agent
+        scene = syc.Scene(image_matrix=img)
+        if up_sample:
+            sensor = syc.Sensor(winx=56,winy=56,centralwinx=32,centralwiny=32,nchannels = 3,resolution_fun = lambda x: bad_res_func(x,(res,res)), resolution_fun_type = 'down')
+        else:
+            sensor = syc.Sensor(winx=32,winy=32,centralwinx=res//2,centralwiny=res//2,nchannels = 3,resolution_fun = lambda x: bad_res102(x,(res,res)), resolution_fun_type = 'down')
+        agent = syc.Agent(max_q = [scene.maxx-sensor.hp.winx,scene.maxy-sensor.hp.winy])
+        #Setting the coordinates to visit
+        if type(trajectory_list) is int:
+            if trajectory_list:
+                np.random.seed(trajectory_list)
+            starting_point = np.array([agent.max_q[0]//2,agent.max_q[1]//2])
+            steps  = []
+            for j in range(sample):
+                steps.append(starting_point*1)
+                starting_point += np.random.randint(-2,3,2) 
+
+            if mixed_state:
+                q_sequence = np.array(steps).astype(int)
+            else:
+                if count == 0:
+                    q_sequence = np.array(steps).astype(int)
+        else:
+            q_sequence = np.array(trajectory_list[img_num]).astype(int)
+
+        if count == 0 :
+            print(q_sequence.shape)
+            
         #Create empty lists to store the syclops outputs
         imim=[]
         dimim=[]
@@ -347,7 +422,7 @@ def create_cifar_dataset(images, labels, res, sample = 5, mixed_state = True, ad
         dvs_images.append(dimim)
         q_seq.append(q_sequence/img_size[0])
         count += 1
-        
+    print(q_sequence)
 
     if add_traject: #If we add the trjectories the train list will become a list of lists, the images and the 
         #corrosponding trajectories, we will change the dataset structure as well. Note the the labels stay the same.
@@ -426,8 +501,8 @@ def split_dataset_xy(dataset,sample):
     return (np.array(dataset_x1)[...,np.newaxis],np.array(dataset_x2)[:,:sample,:]),np.array(dataset_y)
 
 
-def write_to_file(history, net,paramaters):
-    file_name = 'summary_file_{}.txt'.format(net.name)
+def write_to_file(history, net,paramaters, dataset_number):
+    file_name = 'summary_file_{}_{}.txt'.format(net.name, dataset_number)
     if os.path.isfile('/home/labs/ahissarlab/orra/imagewalker/cifar_net_search/{}'.format(file_name)):
         file = open('/home/labs/ahissarlab/orra/imagewalker/cifar_net_search/{}'.format(file_name), 'a')
     else:
@@ -453,8 +528,8 @@ def write_to_file(history, net,paramaters):
     file.write(summary_of_run)
     file.close()
 
-def dataset_update(history, net, parameters):
-    file_name = 'summary_dataframe_{}.pkl'.format(net.name)
+def dataset_update(history, net, parameters, dataset_number):
+    file_name = 'summary_dataframe_{}_{}.pkl'.format(net.name, dataset_number)
     if os.path.isfile('/home/labs/ahissarlab/orra/imagewalker/cifar_net_search/{}'.format(file_name)):
         dataframe = pd.read_pickle('/home/labs/ahissarlab/orra/imagewalker/cifar_net_search/{}'.format(file_name))
     else:

@@ -65,6 +65,10 @@ out.9611
 
 concat = False - out.9612
 
+bidirectional = True (go_backwards=True) out.488739
+
+
+
 
 
 '''
@@ -224,7 +228,7 @@ def cnn_gru(n_timesteps = 5, hidden_size = 128,input_size = 32, concat = True,
     # define LSTM model
     x = keras.layers.GRU(hidden_size,input_shape=(n_timesteps, None),
                          return_sequences=True,recurrent_dropout=rnn_dropout,
-                         kernel_regularizer=regularizer)(x)
+                         kernel_regularizer=regularizer,go_backwards=True)(x)
     
     x = keras.layers.Flatten()(x)
     #Add another dense layer (prior it reached 62%)

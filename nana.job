@@ -1,5 +1,8 @@
-#BSUB -q new-medium
-#BSUB -J example
-#BSUB -o example-%J.o
-#BSUB -e example-%J.e
-python3 run_syclop_generic2.py 12 0.9
+#BSUB -q gpu-long
+#BSUB -app nvidia-gpu 
+#BSUB -env LSB_CONTAINER_IMAGE=ibdgx001:5000/tf_cv:2 
+#BSUB -gpu num=2:j_exclusive=no:gmem=2000 
+#BSUB -R "select[mem>16000] rusage[mem=16000]" 
+#BSUB -o micro_out.%J 
+#BSUB -e micro_err.%J
+python3 micro_feature_learning_integrated.py 7 42 42

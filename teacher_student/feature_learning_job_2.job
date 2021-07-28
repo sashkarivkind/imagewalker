@@ -1,0 +1,29 @@
+#!/bin/sh
+param0=(7 8 9)
+param1=(30 42,120)
+param2=(2 12)
+
+maxtry0= 3 #${param[@]}
+maxtry1= 3 #${param[@]}
+maxtry2= 2 #${param[@]}
+
+try0=0
+while [ $try0 -lt $maxtry0 ]
+do
+try1=0
+while [ $try1 -lt $maxtry1 ]
+do
+try2=0
+while [ $try2 -lt $maxtry2 ]
+do
+
+bsub -q gpu-long -app nvidia-gpu -env LSB_CONTAINER_IMAGE=ibdgx001:5000/tf_cv:2 -gpu num=2:j_exclusive=no:gmem=2000 -R "select[mem>16000] rusage[mem=16000]" -o micro_out.%J -e micro_err.%J python3 micro_feature_learning_integrated.py 7 ${param1[$try0]}  42  
+
+sleep .1
+
+try2=`expr $try2 + 1`
+done
+try1=`expr $try1 + 1`
+done
+try0=`expr $try0 + 1`
+done

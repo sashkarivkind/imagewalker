@@ -180,7 +180,7 @@ def convgru(n_timesteps = 5, cell_size = 128, input_size = 28,input_dim = 3, con
     #x = keras.layers.ConvLSTM2D(128, 2, return_sequences=True, padding = 'same')(x)
     #x = keras.layers.ConvLSTM2D(128, 2, return_sequences=True,padding = 'same', dropout = cnn_dropout, recurrent_dropout=rnn_dropout)(x)
     #x=keras.layers.TimeDistributed(keras.layers.MaxPooling2D(pool_size=(2, 2)))(x)
-    print(x.shape)
+    print(x.shape)parallel_gru_v1_
     x = keras.layers.TimeDistributed(keras.layers.Flatten())(x)
     print(x.shape)
     if concat:

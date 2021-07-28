@@ -183,7 +183,7 @@ for trial in range(num_trials):
     train_prll_dataframe['trial_{}'.format(trial)]  = train_accuracy_prll
     test_prll_dataframe['trial_{}'.format(trial)]  = test_accuracy_prll
     test_dataframe_no_coordinates['trial_{}_train_loss'.format(trial)] = test_no_coor_accuracy
-    test_dataframe_no_coordinates_prll['trial_{}_test_accur'.format(trial)] = test_accuracy_prll
+    test_dataframe_no_coordinates_prll['trial_{}_test_accur'.format(trial)] = test_no_coor_accuracy_prll
 
 #########################   Save Data   ######################################
 train_dataframe.to_pickle('train_dataset_{}_{}'.format(num_trajectories,sample))
