@@ -49,7 +49,7 @@ dropout = parameters['dropout']
 rnn_dropout = parameters['rnn_dropout']
 print(parameters)
 path = '/home/labs/ahissarlab/orra/imagewalker/teacher_student/'
-#path = '/home/orram/Documents/GitHub/imagewalker/teacher_student/'
+path = '/home/orram/Documents/GitHub/imagewalker/teacher_student/'
 def net():
     input = keras.layers.Input(shape=(32,32,3))
 
@@ -187,13 +187,14 @@ print('Extracting Student Feature from Trained Networks')
 sys.path.insert(1, '/home/labs/ahissarlab/orra/imagewalker/teacher_student')
 from feature_learning_utils import student3
 path = '/home/labs/ahissarlab/orra/imagewalker/teacher_student/'
-
+path = '/home/orram/Documents/GitHub/imagewalker/teacher_student/'
 student_test_data = np.zeros([5000,8,8,64])
 student_train_data = np.zeros([45000,8,8,64])
 t_f = True
 feature_list = np.random.choice(np.arange(64),64, replace = False)
 feature_list = np.sort(feature_list)
 
+feature_list = 'all'
 temp_path = path + 'saved_models/{}_feature/'.format(feature_list)
 home_folder = temp_path + '{}_{}_saved_models/'.format(feature_list, trajectory_index)
 checkpoint = t_f
@@ -243,17 +244,48 @@ half_net.evaluate(student_test_data,trainY[45000:], verbose=1)
 print('Training the base newtwork with the student features')
 history = half_net.fit(student_train_data,
                        trainY[:45000],
-                       epochs = 15,
+                       epochs = 5,
                        batch_size = 64,
                        validation_data = (student_test_data, trainY[45000:]),
-                       verbose = 2,)
+                       verbose = 1,)
                         
 
-prediction_data_path = path +'predictions/'
-with open(prediction_data_path + 'predictions_traject_{}_{}_{}_{}'.format('all_layers', feature, trajectory_index,run_index,), 'wb') as file_pi:
-    pickle.dump((student_train_data, student_test_data), file_pi)
+#Save Network
+half_net.save(path +'student_half_net_trained')
+# prediction_data_path = path +'predictions/'
+# with open(prediction_data_path + 'predictions_traject_{}_{}_{}_{}'.format('all_layers', feature, trajectory_index,run_index,), 'wb') as file_pi:
+#     pickle.dump((student_train_data, student_test_data), file_pi)
 
+#%%
+############################## Now Let's Try and Trian the student features #####################################
+########################### Combining the student and the decoder and training ##################################
 
+def full_student(student, half_net):
+    input = keras.layers.Input(shape=(10, 8,8,3))\
+        
+    student_features = student(input)
+    decoder_prediction = half_net(student_features)
+    
+    model = keras.models.Model(inputs=input,outputs=decoder_prediction)
+    
+    opt=tf.keras.optimizers.Adam(lr=1e-3)
 
+    model.compile(
+        optimizer=opt,
+        loss="sparse_categorical_crossentropy",
+        metrics=["sparse_categorical_accuracy"],
+    )
+    
+    return(model)
+
+full_student_net = full_student(numpy_student, half_net)
+
+full_history = full_student_net.fit(train_dataset_x[0],
+                       trainY[:45000],
+                       epochs = 1,
+                       batch_size = 64,
+                       validation_data = (test_dataset_x[0], trainY[45000:]),
+                       verbose = 1,)
+    
 
  

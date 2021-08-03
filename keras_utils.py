@@ -339,6 +339,10 @@ def create_cifar_dataset(images, labels, res, sample = 5, mixed_state = True, ad
     mixed_state : if False, use the same trajectory on every image.
     return_datasets: rerutns datasets rather than dataloaders
     Returns
+    
+    TD: Change the add_seed to allow adding a list of sedds to use and not drew 
+        randomly. 
+        
     -------
     train_dataloader, test_dataloader - torch DataLoader class objects
 

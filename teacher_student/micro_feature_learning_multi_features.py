@@ -72,6 +72,7 @@ if len(sys.argv) == 1:
     'num_feature' : 5,#int(sys.argv[2]),
     'trajectory_index' : 40,#int(sys.argv[3]),
     'sample' : 5,
+    'res'    : 8,
     'run_index' : np.random.randint(10,100),
     'dropout' : 0,
     'rnn_dropout' : 0
@@ -82,6 +83,7 @@ else:
     'num_feature' : int(sys.argv[2]),
     'trajectory_index' : int(sys.argv[3]),
     'sample' : int(sys.argv[4]),
+    'res'    : int(sys.argv[5]),
     'run_index' : np.random.randint(10,100),
     'dropout' : 0.2,
     'rnn_dropout' : 0
@@ -221,7 +223,7 @@ start = 0
 end = batch_size
 train_data = []
 validation_data = []
-train_data = np.zeros([50000,8,8,num_feature])
+train_data = np.zeros([50000,res,res,num_feature])
 count = 0
 #Drow N random features from the batch and sort them in order 
 feature_list = np.random.choice(np.arange(64),num_feature, replace = False)
@@ -287,7 +289,7 @@ model_checkpoint_callback = tf.keras.callbacks.ModelCheckpoint(
 def save_model(net,path,parameters,checkpoint = True):
     feature_list = parameters['feature_list']
     traject = parameters['trajectory_index']
-    home_folder = path + '{}_{}_saved_models/'.format(feature_list, traject)
+    home_folder = path + '{}_{}_{}_{}_saved_models/'.format(feature_list, traject,sample , res)
     if not os.path.exists(home_folder):
         os.mkdir(home_folder)
     if checkpoint:

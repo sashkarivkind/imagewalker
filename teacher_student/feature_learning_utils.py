@@ -61,6 +61,34 @@ def dataset_update(history, net, parameters, name = '_'):
 
     dataframe.to_pickle('/home/labs/ahissarlab/orra/imagewalker/teacher_student/feature_learning/{}'.format(file_name))
 
+def full_learning_dataset_update(student_history, 
+                                 decoder_history,
+                                 full_history,
+                                 net, parameters, name = '_'):
+    file_name = 'summary_dataframe_feature_learning_{}.pkl'.format(name)
+    if os.path.isfile('/home/labs/ahissarlab/orra/imagewalker/teacher_student/feature_learning/{}'.format(file_name)):
+        dataframe = pd.read_pickle('/home/labs/ahissarlab/orra/imagewalker/teacher_student/feature_learning/{}'.format(file_name))
+    else:
+        dataframe = pd.DataFrame()
+    
+    values_to_add = parameters
+    values_to_add['net_name'] = net.name
+    values_to_add['student_min_test_error'] = min(student_history.history['val_mean_squared_error'])
+    values_to_add['student_min_train_error'] = min(student_history.history['mean_squared_error'])
+    values_to_add['student_train_error'] = [student_history.history['mean_squared_error']]
+    values_to_add['student_test_error'] = [student_history.history['val_mean_squared_error']]
+    values_to_add['decoder_min_test_error'] = min(decoder_history.history['val_sparse_categorical_accuracy'])
+    values_to_add['decoder_min_train_error'] = min(decoder_history.history['sparse_categorical_accuracy'])
+    values_to_add['decoder_train_error'] = [decoder_history.history['sparse_categorical_accuracy']]
+    values_to_add['decoder_test_error'] = [decoder_history.history['val_sparse_categorical_accuracy']]
+    values_to_add['full_min_test_error'] = min(full_history.history['val_sparse_categorical_accuracy'])
+    values_to_add['full_min_train_error'] = min(full_history.history['sparse_categorical_accuracy'])
+    values_to_add['full_train_error'] = [full_history.history['sparse_categorical_accuracy']]
+    values_to_add['full_test_error'] = [full_history.history['val_sparse_categorical_accuracy']]
+    dataframe = dataframe.append(values_to_add, ignore_index = True)
+
+    dataframe.to_pickle('/home/labs/ahissarlab/orra/imagewalker/teacher_student/feature_learning/{}'.format(file_name))
+
 def save_model(net,path,parameters,checkpoint = True):
     feature = parameters['feature']
     traject = parameters['trajectory_index']
@@ -92,49 +120,11 @@ def save_model(net,path,parameters,checkpoint = True):
     net.save_weights(keras_weights_path + 'keras_weights_{}_{}'.format(feature,traject))
     #LOADING WITH - load_status = sequential_model.load_weights("ckpt")
     
-def student1(sample = 10,activation = 'tanh'):
-    input = keras.layers.Input(shape=(sample, 8,8,3))
-    
-    #Define CNN
-    #x = keras.layers.Conv2D(1,(3,3),activation='relu', padding = 'same', 
-    #                        name = 'convLSTM1')(input)
-    x = keras.layers.ConvLSTM2D(1,(3,3), padding = 'same', 
-                            name = 'convLSTM1',activation=activation)(input)
-    print(x.shape)
-    model = keras.models.Model(inputs=input,outputs=x, name = 'student_1')
-    opt=tf.keras.optimizers.Adam(lr=1e-3)
 
-    model.compile(
-        optimizer=opt,
-        loss="mean_squared_error",
-        metrics=["mean_squared_error"],
-    )
-    return model
 
-def student2(sample = 10,activation = 'tanh'):
-    input = keras.layers.Input(shape=(sample, 8,8,3))
-    
-    #Define CNN
-    #x = keras.layers.Conv2D(1,(3,3),activation='relu', padding = 'same', 
-    #                        name = 'convLSTM1')(input)
-    x = keras.layers.ConvLSTM2D(10,(3,3), padding = 'same', return_sequences=True,
-                            name = 'convLSTM1')(input)
-    x = keras.layers.ConvLSTM2D(1,(3,3), padding = 'same', 
-                            name = 'convLSTM2',activation=activation)(x)
-    print(x.shape)
-    model = keras.models.Model(inputs=input,outputs=x, name = 'student_2')
-    opt=tf.keras.optimizers.Adam(lr=1e-3)
-
-    model.compile(
-        optimizer=opt,
-        loss="mean_squared_error",
-        metrics=["mean_squared_error"],
-    )
-    return model
-
-def student3(sample = 10, activation = 'tanh', dropout = None, rnn_dropout = None,
+def student3(sample = 10, res = 8, activation = 'tanh', dropout = None, rnn_dropout = None,
              num_feature = 1):
-    input = keras.layers.Input(shape=(sample, 8,8,3))
+    input = keras.layers.Input(shape=(sample, res,res,3))
     
     #Define CNN
     #x = keras.layers.Conv2D(1,(3,3),activation='relu', padding = 'same', 
@@ -204,51 +194,6 @@ def student32(sample = 10):
 
     return model
 
-def student1_cnn(sample = 10):
-    input = keras.layers.Input(shape=(sample, 8,8,3))
-    
-    #Define CNN
-    #x = keras.layers.Conv2D(1,(3,3),activation='relu', padding = 'same', 
-    #                        name = 'convLSTM1')(input)
-    x = keras.layers.ConvLSTM2D(10,(3,3), padding = 'same', return_sequences=True,
-                            name = 'convLSTM1')(input)
-    x = tf.transpose(x,[0,2,3,1,4])
-    x = keras.layers.Reshape((8,8,sample * 10))(x)
-    x = keras.layers.Conv2D(1, (3,3), padding = 'same', activation = 'relu')(x)
-    print(x.shape)
-    model = keras.models.Model(inputs=input,outputs=x, name = 'student_1_cnn')
-    opt=tf.keras.optimizers.Adam(lr=1e-3)
-
-    model.compile(
-        optimizer=opt,
-        loss="mean_squared_error",
-        metrics=["mean_squared_error"],
-    )
-    return model
-
-def student2_cnn(sample = 10):
-    input = keras.layers.Input(shape=(sample, 8,8,3))
-    
-    #Define CNN
-    #x = keras.layers.Conv2D(1,(3,3),activation='relu', padding = 'same', 
-    #                        name = 'convLSTM1')(input)
-    x = keras.layers.ConvLSTM2D(10,(3,3), padding = 'same', return_sequences=True,
-                            name = 'convLSTM1')(input)
-    x = keras.layers.ConvLSTM2D(20,(3,3), padding = 'same', return_sequences=True,
-                            name = 'convLSTM2')(x)
-    x = tf.transpose(x,[0,2,3,1,4])
-    x = keras.layers.Reshape((8,8,sample * 20))(x)
-    x = keras.layers.Conv2D(1, (3,3), padding = 'same', activation = 'relu')(x)
-    print(x.shape)
-    model = keras.models.Model(inputs=input,outputs=x, name = 'student_2_cnn')
-    opt=tf.keras.optimizers.Adam(lr=1e-3)
-
-    model.compile(
-        optimizer=opt,
-        loss="mean_squared_error",
-        metrics=["mean_squared_error"],
-    )
-    return model
 
 def student3_cnn(sample = 10):
     input = keras.layers.Input(shape=(sample, 8,8,3))
@@ -271,46 +216,3 @@ def student3_cnn(sample = 10):
 
     return model
 
-def student32_cnn(sample = 10):
-    input = keras.layers.Input(shape=(sample, 8,8,3))
-    
-    #Define CNN
-    #x = keras.layers.Conv2D(1,(3,3),activation='relu', padding = 'same', 
-    #                        name = 'convLSTM1')(input)
-    x = keras.layers.ConvLSTM2D(32,(3,3), padding = 'same', return_sequences=True,
-                            name = 'convLSTM1')(input)
-    x = keras.layers.ConvLSTM2D(64,(3,3), padding = 'same', return_sequences=True,
-                            name = 'convLSTM2')(x)
-    x = keras.layers.ConvLSTM2D(128,(3,3), padding = 'same', return_sequences=True,
-                            name = 'convLSTM3')(x)
-    x = tf.transpose(x,[0,2,3,1,4])
-    x = keras.layers.Reshape((8,8,sample * 128))(x)
-    x = keras.layers.Conv2D(1, (3,3), padding = 'same', activation = 'relu')(x)
-    
-    print(x.shape)
-    model = keras.models.Model(inputs=input,outputs=x, name = 'student_3_cnn')
-
-    return model
-
-def studentcnn(sample = 10):
-    input = keras.layers.Input(shape=(sample, 8,8,3))
-    
-    #Define CNN
-    #x = keras.layers.Conv2D(1,(3,3),activation='relu', padding = 'same', 
-    #                        name = 'convLSTM1')(input)
-    x = keras.layers.TimeDistributed(keras.layers.Conv2D(32,(3,3), padding = 'same', 
-                            name = 'conv1'))(input)
-    x = keras.layers.TimeDistributed(keras.layers.Conv2D(64,(3,3), padding = 'same', 
-                            name = 'conv2'))(x)
-    x = keras.layers.ConvLSTM2D(1,(3,3), padding = 'same', 
-                            name = 'convLSTM1')(x)
-    print(x.shape)
-    model = keras.models.Model(inputs=input,outputs=x, name = 'student_cnn_first')
-    opt=tf.keras.optimizers.Adam(lr=1e-3)
-
-    model.compile(
-        optimizer=opt,
-        loss="mean_squared_error",
-        metrics=["mean_squared_error"],
-    )
-    return model
