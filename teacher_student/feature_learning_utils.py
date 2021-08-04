@@ -77,12 +77,12 @@ def full_learning_dataset_update(student_history,
     values_to_add['student_min_train_error'] = min(student_history.history['mean_squared_error'])
     values_to_add['student_train_error'] = [student_history.history['mean_squared_error']]
     values_to_add['student_test_error'] = [student_history.history['val_mean_squared_error']]
-    values_to_add['decoder_min_test_error'] = min(decoder_history.history['val_sparse_categorical_accuracy'])
-    values_to_add['decoder_min_train_error'] = min(decoder_history.history['sparse_categorical_accuracy'])
+    values_to_add['decoder_max_test_error'] = max(decoder_history.history['val_sparse_categorical_accuracy'])
+    values_to_add['decoder_max_train_error'] = max(decoder_history.history['sparse_categorical_accuracy'])
     values_to_add['decoder_train_error'] = [decoder_history.history['sparse_categorical_accuracy']]
     values_to_add['decoder_test_error'] = [decoder_history.history['val_sparse_categorical_accuracy']]
-    values_to_add['full_min_test_error'] = min(full_history.history['val_sparse_categorical_accuracy'])
-    values_to_add['full_min_train_error'] = min(full_history.history['sparse_categorical_accuracy'])
+    values_to_add['full_max_test_error'] = max(full_history.history['val_sparse_categorical_accuracy'])
+    values_to_add['full_max_train_error'] = max(full_history.history['sparse_categorical_accuracy'])
     values_to_add['full_train_error'] = [full_history.history['sparse_categorical_accuracy']]
     values_to_add['full_test_error'] = [full_history.history['val_sparse_categorical_accuracy']]
     dataframe = dataframe.append(values_to_add, ignore_index = True)
@@ -215,4 +215,3 @@ def student3_cnn(sample = 10):
     model = keras.models.Model(inputs=input,outputs=x, name = 'student_3_cnn')
 
     return model
-

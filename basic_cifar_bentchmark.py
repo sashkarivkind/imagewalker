@@ -1,7 +1,7 @@
 
 	
 # example of loading the cifar10 dataset
-import nupy as np
+import numpy as np
 from matplotlib import pyplot
 import tensorflow.keras as keras
 import tensorflow as tf
@@ -74,9 +74,9 @@ def net():
     x = keras.layers.MaxPooling2D((2, 2), 
                             name = 'max_pool1')(x)
     x = keras.layers.Dropout(0.2)(x)
-    x = keras.layers.Conv2D(64,(3,3),activation='relu', padding = 'same', 
+    x = keras.layers.Conv2D(32,(3,3),activation='relu', padding = 'same', 
                             name = 'cnn2')(x)
-    x = keras.layers.Conv2D(64,(3,3),activation='relu', padding = 'same', 
+    x = keras.layers.Conv2D(32,(3,3),activation='relu', padding = 'same', 
                             name = 'cnn22')(x)
     x = keras.layers.MaxPooling2D((2, 2), 
                             name = 'max_pool2')(x)

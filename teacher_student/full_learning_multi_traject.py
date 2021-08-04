@@ -3,7 +3,7 @@
 """
 
 """
-
+import gc
 import os 
 import sys
 sys.path.insert(1, '/home/labs/ahissarlab/orra/imagewalker')
@@ -47,9 +47,9 @@ images, labels = trainX, trainY
 
 if len(sys.argv) == 1:
     parameters = {
-    'layer_name' : 'cnn32',#layers_names[int(sys.argv[1])],
-    'num_feature' : 5,#int(sys.argv[2]),
-    'num_trajectories' : 2,#int(sys.argv[3]),
+    'layer_name' : 'cnn32',
+    'num_feature' : 5,
+    'num_trajectories' : 2,
     'sample' : 5,
     'res'    : 8,
     'inner_eppochs' : 1,
@@ -101,6 +101,7 @@ if len(sys.argv) == 1:
     path = '/home/orram/Documents/GitHub/imagewalker/teacher_student/'
 else: 
     path = '/home/labs/ahissarlab/orra/imagewalker/teacher_student/'
+    path = os.getcwd() + '/'
 def train_model(path, trainX, trainY):
     def net():
         input = keras.layers.Input(shape=(32,32,3))
@@ -217,7 +218,7 @@ feature_train_data = train_data[:45000][:,:,:]
 
 #%%
 ##################### Define Student #########################################
-epochs = 30
+epochs = 60
 verbose = 2
 evaluate_prediction_size = 150
 prediction_data_path = path +'predictions/'
@@ -282,6 +283,9 @@ for epoch in range(epochs):
                                 )
     train_dataset_x, train_dataset_y = split_dataset_xy(train_dataset, sample = sample)
     test_dataset_x, test_dataset_y = split_dataset_xy(test_dataset,sample = sample)
+    del train_dataset
+    del test_dataset
+    gc.collect()
     print('eval on new traject')
     student.evaluate(test_dataset_x[0],
                     feature_test_data, verbose = 2)
@@ -295,6 +299,9 @@ for epoch in range(epochs):
                     callbacks=[model_checkpoint_callback])
     print('{} train:'.format(student.name), student_history.history['mean_squared_error'])
     print('{} test:'.format(student.name), student_history.history['val_mean_squared_error'])
+    del train_dataset_x
+    del test_dataset_x
+    gc.collect()
 save_model(student, save_model_path, parameters, checkpoint = False)
 student.load_weights(checkpoint_filepath)
 save_model(student, save_model_path, parameters, checkpoint = True)
@@ -384,12 +391,18 @@ pre_training_accur = decoder.evaluate(student_test_data,trainY[45000:], verbose=
 parameters['pre_training_decoder_accur'] = pre_training_accur[1]
 ############################ Re-train the half_net with the student training features ###########################
 print('Training the base newtwork with the student features')
+lr_reducer = keras.callbacks.ReduceLROnPlateau(factor=np.sqrt(0.1), cooldown=0, patience=1, min_lr=0.5e-6)
+early_stopper = keras.callbacks.EarlyStopping(
+    monitor='val_sparse_categorical_accuracy', min_delta=1e-4, patience=5, verbose=0,
+    mode='auto', baseline=None, restore_best_weights=True
+)
 decoder_history = decoder.fit(student_train_data,
                        trainY[:45000],
                        epochs = 5,
                        batch_size = 64,
                        validation_data = (student_test_data, trainY[45000:]),
-                       verbose = 2,)
+                       verbose = 2,
+                       callbacks=[lr_reducer,early_stopper],)
 
 home_folder = save_model_path + '{}_{}_{}_{}_{}_saved_models/'.format(feature_list, num_trajectories, sample , res, inner_eppochs)
 decoder.save(home_folder +'decoder_trained_model')
@@ -433,7 +446,8 @@ full_history = full_student_net.fit(train_dataset_x[0],
                        epochs = 5,
                        batch_size = 64,
                        validation_data = (test_dataset_x[0], trainY[45000:]),
-                       verbose = 2,)
+                       verbose = 2,
+                       callbacks=[lr_reducer,early_stopper],)
 
-full_student_net.save(home_folder +'full_trained_model')   
+#full_student_net.save(home_folder +'full_trained_model')   
 full_learning_dataset_update(student_history, decoder_history, full_history, student,parameters, name = 'multi_traject_train_{}_{}'.format(res,sample))

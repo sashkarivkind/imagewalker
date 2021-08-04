@@ -24,7 +24,7 @@ from keras_utils import create_cifar_dataset, split_dataset_xy
 
 
 
-
+print(os.getcwd() + '/')
 #%%
 
 layers_names = [
@@ -98,6 +98,7 @@ if len(sys.argv) == 1:
     path = '/home/orram/Documents/GitHub/imagewalker/teacher_student/'
 else: 
     path = '/home/labs/ahissarlab/orra/imagewalker/teacher_student/'
+    path = os.getcwd() + '/'
 def train_model(path, trainX, trainY):
     def net():
         input = keras.layers.Input(shape=(32,32,3))
@@ -229,20 +230,20 @@ test_dataset_x, test_dataset_y = split_dataset_xy(test_dataset,sample = sample)
 
 #%%
 ##################### Define Student #########################################
-epochs = 30
+epochs = 50
 verbose = 2
 evaluate_prediction_size = 150
 prediction_data_path = path +'predictions/'
 shape = feature_test_data.shape
 teacher_mean = np.mean(feature_test_data.reshape(shape[0]*shape[1]*shape[2], shape[3]),axis = 0)
 teacher_var = np.var(feature_test_data.reshape(shape[0]*shape[1]*shape[2], shape[3]),axis = 0)
-print('teacher mean = ', teacher_mean, 'var =', teacher_var)
+#print('teacher mean = ', teacher_mean, 'var =', teacher_var)
 parameters['teacher_mean'] = teacher_mean
 parameters['teacher_var'] = teacher_var
-if num_feature == 64:
+if num_feature == 64 or num_feature == 128:
     feature_list = 'all'
 parameters['feature_list'] = feature_list   
-checkpoint_filepath = path + 'saved_models/{}_feature/{}_feature_net'.format(feature_list,feature_list)
+checkpoint_filepath = path + 'saved_models/{}_feature/{}_{}_{}_{}_feature_net'.format(feature_list,feature_list,sample,res,trajectory_index)
 save_model_path = path + 'saved_models/{}_feature/'.format(feature_list)
 model_checkpoint_callback = tf.keras.callbacks.ModelCheckpoint(
     filepath=checkpoint_filepath,
@@ -250,6 +251,11 @@ model_checkpoint_callback = tf.keras.callbacks.ModelCheckpoint(
     monitor='val_mean_squared_error',
     mode='min',
     save_best_only=True)
+lr_reducer = keras.callbacks.ReduceLROnPlateau(factor=np.sqrt(0.1), cooldown=0, patience=5, min_lr=0.5e-6)
+early_stopper = keras.callbacks.EarlyStopping(
+    monitor='val_mean_squared_error', min_delta=5e-5, patience=3, verbose=0,
+    mode='auto', baseline=None, restore_best_weights=True
+)
 
 
 def save_model(net,path,parameters,checkpoint = True):
@@ -297,7 +303,7 @@ student_history = student.fit(train_dataset_x[0],
                 epochs = epochs,
                 validation_data=(test_dataset_x[0], feature_test_data),
                 verbose = verbose,
-                callbacks=[model_checkpoint_callback])
+                callbacks=[model_checkpoint_callback,lr_reducer,early_stopper])
 print('{} train:'.format(student.name), student_history.history['mean_squared_error'])
 print('{} test:'.format(student.name), student_history.history['val_mean_squared_error'])
 save_model(student, save_model_path, parameters, checkpoint = False)
@@ -326,7 +332,7 @@ for batch in range(len(test_dataset_x[0])//batch_size + 1):
     student_test_data[start:end,:,:,:] = test_temp[:,:,:,:]
     start += batch_size
     end += batch_size
-#Evaluate per feature
+#Evaluate per featurefull_student_net.evaluate(test_dataset_x[0],test_dataset_y, verbose=1)
 var_list = []
 for feature_indx in range(num_feature):
     var = np.var(student_test_data[:,:,:,feature_indx] - feature_test_data[:,:,:,feature_indx])
@@ -342,8 +348,9 @@ with open(prediction_data_path + 'predictions_traject_{}_{}_{}_{}'.format(featur
 
 #Define a Student_Decoder Network that will take the Teacher weights of the last layers:   
 def Student_Decoder(layer = layer_name ):
-    input = keras.layers.Input(shape=(res,res,64))
+    
     if layer == 'max_pool2':
+        input = keras.layers.Input(shape=(res,res,64))
         x = keras.layers.Conv2D(128,(3,3),activation='relu', padding = 'same', 
                             name = 'cnn3')(input)
         x = keras.layers.Conv2D(128,(3,3),activation='relu', padding = 'same', 
@@ -353,6 +360,7 @@ def Student_Decoder(layer = layer_name ):
     
         x = keras.layers.Dropout(0.2)(x)
     elif layer == 'max_pool3': 
+        input = keras.layers.Input(shape=(res,res,128))
         x = keras.layers.Dropout(0.2)(input)
     #Flatten and add linear layer and softmax
 
@@ -394,24 +402,33 @@ decoder.evaluate(feature_test_data,trainY[45000:], verbose=2)
 
 ############################################## Evaluate with Student Features ###################################
 print('Evaluating students features witout more training')
+lr_reducer = keras.callbacks.ReduceLROnPlateau(factor=np.sqrt(0.1), cooldown=0, patience=1, min_lr=0.5e-6)
+early_stopper = keras.callbacks.EarlyStopping(
+    monitor='val_sparse_categorical_accuracy', min_delta=1e-4, patience=5, verbose=0,
+    mode='auto', baseline=None, restore_best_weights=True
+)
 pre_training_accur = decoder.evaluate(student_test_data,trainY[45000:], verbose=2)
 parameters['pre_training_decoder_accur'] = pre_training_accur[1]
 ############################ Re-train the half_net with the student training features ###########################
 print('Training the base newtwork with the student features')
 decoder_history = decoder.fit(student_train_data,
                        trainY[:45000],
-                       epochs = 5,
+                       epochs = 10,
                        batch_size = 64,
                        validation_data = (student_test_data, trainY[45000:]),
-                       verbose = 2,)
+                       verbose = 2,
+                       callbacks=[lr_reducer,early_stopper],)
 
 home_folder = save_model_path + '{}_{}_{}_{}_saved_models/'.format(feature_list, trajectory_index, sample , res)
 decoder.save(home_folder +'decoder_trained_model')
 ############################## Now Let's Try and Trian the student features #####################################
 ########################### Combining the student and the decoder and training ##################################
 print('Training the student and decoder together - reinitiating the decoder before learning')
-decoder = Student_Decoder()
-layers_names = ['cnn3','cnn32','fc1','final']
+decoder = Student_Decoder(layer = layer_name)
+if layer_name == 'max_pool2':
+    layers_names = ['cnn3','cnn32','fc1','final']
+elif layer_name == 'max_pool3':
+    layers_names = ['fc1','final']
 #Insert the Teachers weights to the student Decoder
 for layer in layers_names:
     
@@ -420,6 +437,7 @@ for layer in layers_names:
     print(decoder.get_layer(layer).weights[0].shape)
     new_weights = [teacher_weights, teacher.get_layer(layer).weights[1].numpy()]
     decoder.get_layer(layer).set_weights(new_weights)
+
 
 
 def full_student(student, decoder):
@@ -444,10 +462,11 @@ full_student_net = full_student(student, decoder)
 
 full_history = full_student_net.fit(train_dataset_x[0],
                        trainY[:45000],
-                       epochs = 15,
+                       epochs = 10,
                        batch_size = 64,
                        validation_data = (test_dataset_x[0], trainY[45000:]),
-                       verbose = 2,)
+                       verbose = 2,
+                       callbacks=[lr_reducer,early_stopper],)
 
-full_student_net.save(home_folder +'full_trained_model')   
-full_learning_dataset_update(student_history, decoder_history, full_history, student,parameters, name = 'full_train_{}_{}'.format(res,sample))
+#full_student_net.save(home_folder +'full_trained_model')   
+full_learning_dataset_update(student_history, decoder_history, full_history, student,parameters, name = 'full_train_102_{}_{}'.format(res,sample))
