@@ -18,8 +18,21 @@ import matplotlib.pyplot as plt
 import scipy.stats as stats
 import pandas as pd
 import pickle
+from vanvalenlab_convolutional_recurrent import ConvGRU2D
 
 
+def net_weights_reinitializer(model):
+    for ix, layer in enumerate(model.layers):
+        if hasattr(model.layers[ix], 'kernel_initializer') and \
+                hasattr(model.layers[ix], 'bias_initializer'):
+            weight_initializer = model.layers[ix].kernel_initializer
+            bias_initializer = model.layers[ix].bias_initializer
+
+            old_weights, old_biases = model.layers[ix].get_weights()
+            ev=keras.backend.eval #evaluate everything to comply with keras1
+            model.layers[ix].set_weights([
+                ev(weight_initializer(ev(old_weights.shape))),
+                ev(bias_initializer(ev(old_biases.shape)))])
 
 def write_to_file(history, net,paramaters):
     file_name = 'summary_file_feature_learning.txt'
@@ -123,21 +136,29 @@ def save_model(net,path,parameters,checkpoint = True):
 
 
 def student3(sample = 10, res = 8, activation = 'tanh', dropout = None, rnn_dropout = None,
-             num_feature = 1):
+             num_feature = 1, layer_norm = False , n_layers=3, conv_rnn_type='lstm'):
     input = keras.layers.Input(shape=(sample, res,res,3))
-    
+    if conv_rnn_type == 'lstm':
+        Our_RNN_cell = keras.layers.ConvLSTM2D
+    elif  conv_rnn_type == 'gru':
+        Our_RNN_cell = ConvGRU2D
+    else:
+        error("not supported type of conv rnn cell")
     #Define CNN
     #x = keras.layers.Conv2D(1,(3,3),activation='relu', padding = 'same', 
     #                        name = 'convLSTM1')(input)
-    x = keras.layers.ConvLSTM2D(32,(3,3), padding = 'same', return_sequences=True,
+    x = Our_RNN_cell(32,(3,3), padding = 'same', return_sequences=True,
                                 dropout = dropout,recurrent_dropout=rnn_dropout, 
                             name = 'convLSTM1')(input)
-    x = keras.layers.ConvLSTM2D(64,(3,3), padding = 'same', return_sequences=True,
+    x = Our_RNN_cell(64,(3,3), padding = 'same', return_sequences=True,
                             name = 'convLSTM2',
                             dropout = dropout,recurrent_dropout=rnn_dropout,)(x)
-    x = keras.layers.ConvLSTM2D(num_feature,(3,3), padding = 'same', 
+    x = Our_RNN_cell(num_feature,(3,3), padding = 'same',
                             name = 'convLSTM3', activation=activation,
                             dropout = dropout,recurrent_dropout=rnn_dropout,)(x)
+    if layer_norm:
+        x = keras.layers.LayerNormalization(axis=3)(x)
+
     print(x.shape)
     model = keras.models.Model(inputs=input,outputs=x, name = 'student_3')
     opt=tf.keras.optimizers.Adam(lr=1e-3)

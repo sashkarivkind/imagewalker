@@ -19,62 +19,122 @@ import scipy.stats as stats
 import pandas as pd
 import time
 import pickle
-
-from feature_learning_utils import  student3,  write_to_file, full_learning_dataset_update
+import argparse
+from feature_learning_utils import  student3,  write_to_file, full_learning_dataset_update,  net_weights_reinitializer
 from keras_utils import create_cifar_dataset, split_dataset_xy
-
-TESTMODE = True
 
 print(os.getcwd() + '/')
 #%%
 
-layers_names = [
-    'input_1',
-    'cnn1',
-    'cnn12',
-    "max_pool1",
-    'cnn2',
-    'cnn22',
-    'max_pool2',
-    'cnn3',
-    'cnn32',
-    'max_pool3',
-    'fc1',
-    'final',
-    ]
 # load dataset
 (trainX, trainY), (testX, testY) = cifar10.load_data()
 images, labels = trainX, trainY
 
-if len(sys.argv) == 1:
-    parameters = {
-    'layer_name' : 'max_pool2',#layers_names[int(sys.argv[1])],
-    'num_feature' : 64,#int(sys.argv[2]),
-    'trajectory_index' : 40,#int(sys.argv[3]),
-    'sample' : 5,
-    'res'    : 8,
-    'run_index' : np.random.randint(10,100),
-    'dropout' : 0.2,
-    'rnn_dropout' : 0,
-    'run_name_prefix': 'noname'
-    }
-else:
-    parameters = {
-    'layer_name' : layers_names[int(sys.argv[1])],
-    'num_feature' : int(sys.argv[2]),
-    'trajectory_index' : int(sys.argv[3]),
-    'sample' : int(sys.argv[4]),
-    'res'    : int(sys.argv[5]),
-    'run_index' : np.random.randint(10,100),
-    'dropout' : 0.2,
-    'rnn_dropout' : 0,
-    'run_name_prefix': 'noname'
-    }
+# if len(sys.argv) == 1:
+#     parameters = {
+#     'layer_name' : 'max_pool2',#layers_names[int(sys.argv[1])],
+#     'num_feature' : 64,#int(sys.argv[2]),
+#     'trajectory_index' : 40,#int(sys.argv[3]),
+#     'sample' : 5,
+#     'res'    : 8,
+#     'run_index' : np.random.randint(10,100),
+#     'dropout' : 0.2,
+#     'rnn_dropout' : 0,
+#     'run_name_prefix': 'noname'
+#     }
+# else:
+#     parameters = {
+#     'layer_name' : layers_names[int(sys.argv[1])],
+#     'num_feature' : int(sys.argv[2]),
+#     'trajectory_index' : int(sys.argv[3]),
+#     'sample' : int(sys.argv[4]),
+#     'res'    : int(sys.argv[5]),
+#     'run_index' : np.random.randint(10,100),
+#     'dropout' : 0.2,
+#     'rnn_dropout' : 0,
+#     'run_name_prefix': 'noname'
+#     }
+
+parser = argparse.ArgumentParser()
+
+#general parameters
+parser.add_argument('--run_name_prefix', default='noname', type=str, help='path to pretrained teacher net')
+parser.add_argument('--run_index', default=10, type=int, help='run_index')
+
+parser.add_argument('--testmode', dest='testmode', action='store_true')
+parser.add_argument('--no-testmode', dest='testmode', action='store_false')
+
+### student parameters
+parser.add_argument('--num_feature', default=64, type=int, help='legacy to be discarded')
+
+parser.add_argument('--conv_rnn_type', default='lstm', type=str, help='conv_rnn_type')
+parser.add_argument('--student_nl', default='relu', type=str, help='non linearity')
+parser.add_argument('--dropout', default=0.2, type=float, help='dropout1')
+parser.add_argument('--rnn_dropout', default=0.0, type=float, help='dropout1')
+conv_rnn_type='lstm'
+
+parser.add_argument('--layer_norm_student', dest='layer_norm_student', action='store_true')
+parser.add_argument('--no-layer_norm_student', dest='layer_norm_student', action='store_false')
+
+
+### syclop parameters
+parser.add_argument('--trajectory_index', default=40, type=int, help='trajectory index')
+parser.add_argument('--sample', default=5, type=int, help='sample')
+parser.add_argument('--res', default=8, type=int, help='resolution')
+
+### teacher network parameters
+parser.add_argument('--teacher_net', default=None, type=str, help='path to pretrained teacher net')
+
+parser.add_argument('--resblocks', default=3, type=int, help='resblocks')
+parser.add_argument('--last_layer_size', default=128, type=int, help='last_layer_size')
+
+
+parser.add_argument('--dropout1', default=0.2, type=float, help='dropout1')
+parser.add_argument('--dropout2', default=0.0, type=float, help='dropout2')
+parser.add_argument('--dataset_norm', default=128.0, type=float, help='dropout2')
+parser.add_argument('--dataset_center', dest='dataset_center', action='store_true')
+parser.add_argument('--no-dataset_center', dest='dataset_center', action='store_false')
+
+
+parser.add_argument('--layer_norm_res', dest='layer_norm_res', action='store_true')
+parser.add_argument('--no-layer_norm_res', dest='layer_norm_res', action='store_false')
+
+parser.add_argument('--layer_norm_2', dest='layer_norm_2', action='store_true')
+parser.add_argument('--no-layer_norm_2', dest='layer_norm_2', action='store_false')
+
+parser.add_argument('--skip_conn', dest='skip_conn', action='store_true')
+parser.add_argument('--no-skip_conn', dest='skip_conn', action='store_false')
+
+parser.add_argument('--last_maxpool_en', dest='last_maxpool_en', action='store_true')
+parser.add_argument('--no-last_maxpool_en', dest='last_maxpool_en', action='store_false')
+
+parser.add_argument('--nl', default='relu', type=str, help='non linearity')
+
+parser.add_argument('--stopping_patience', default=10, type=int, help='stopping patience')
+parser.add_argument('--learning_patience', default=5, type=int, help='stopping patience')
+parser.add_argument('--manual_suffix', default='', type=str, help='manual suffix')
+
+parser.add_argument('--data_augmentation', dest='data_augmentation', action='store_true')
+parser.add_argument('--no-data_augmentation', dest='data_augmentation', action='store_false')
+
+parser.add_argument('--rotation_range', default=0.0, type=float, help='dropout1')
+parser.add_argument('--width_shift_range', default=0.1, type=float, help='dropout2')
+parser.add_argument('--height_shift_range', default=0.1, type=float, help='dropout2')
+
+parser.set_defaults(data_augmentation=True,layer_norm_res=True,layer_norm_student=True,layer_norm_2=True,skip_conn=True,last_maxpool_en=True, testmode=False,dataset_center=True)
+
+config = parser.parse_args()
+config = vars(config)
+print('config  ',config)
+
+parameters = config
+TESTMODE = parameters['testmode']
+
 
 lsbjob = os.getenv('LSB_JOBID')
 lsbjob = '' if lsbjob is None else lsbjob
 
-layer_name = parameters['layer_name']
+# layer_name = parameters['layer_name']
 num_feature = parameters['num_feature']
 trajectory_index = parameters['trajectory_index']
 sample = parameters['sample']
@@ -89,9 +149,14 @@ def prep_pixels(train, test):
     # convert from integers to floats
     train_norm = train.astype('float32')
     test_norm = test.astype('float32')
+    #center
+    if parameters['dataset_center']:
+        mean_image = np.mean(train_norm, axis=0)
+        train_norm -= mean_image
+        test_norm -= mean_image
     # normalize to range 0-1
-    train_norm = train_norm / 255.0
-    test_norm = test_norm / 255.0
+    train_norm = train_norm / parameters['dataset_norm']
+    test_norm = test_norm /  parameters['dataset_norm']
     # return normalized images
     return train_norm, test_norm
 
@@ -106,92 +171,56 @@ trainX, testX = prep_pixels(trainX, testX)
 # else:
 #     path = '/home/labs/ahissarlab/orra/imagewalker/teacher_student/'
 path = os.getcwd() + '/'
-def train_model(path, trainX, trainY):
-    def net():
-        input = keras.layers.Input(shape=(32,32,3))
-        
-        #Define CNN
-        x = keras.layers.Conv2D(32,(3,3),activation='relu', padding = 'same', 
-                                name = 'cnn1')(input)
-        x = keras.layers.Conv2D(32,(3,3),activation='relu', padding = 'same', 
-                                name = 'cnn12')(x)
-        x = keras.layers.MaxPooling2D((2, 2), 
-                                name = 'max_pool1')(x)
-        x = keras.layers.Dropout(0.2)(x)
-        x = keras.layers.Conv2D(64,(3,3),activation='relu', padding = 'same', 
-                                name = 'cnn2')(x)
-        x = keras.layers.Conv2D(64,(3,3),activation='relu', padding = 'same', 
-                                name = 'cnn22')(x)
-        x = keras.layers.MaxPooling2D((2, 2), 
-                                name = 'max_pool2')(x)
-        x = keras.layers.Dropout(0.2)(x)
-        x = keras.layers.Conv2D(128,(3,3),activation='relu', padding = 'same', 
-                                name = 'cnn3')(x)
-        x = keras.layers.Conv2D(128,(3,3),activation='relu', padding = 'same', 
-                                name = 'cnn32')(x)
-        x = keras.layers.MaxPooling2D((2, 2), 
-                                name = 'max_pool3')(x)
-        x = keras.layers.Dropout(0.2)(x)
-        #Flatten and add linear layer and softmax'''
 
 
-
-        x = keras.layers.Flatten()(x)
-        x = keras.layers.Dense(128,activation="relu", 
-                                name = 'fc1')(x)
-        x = keras.layers.Dense(10,activation="softmax", 
-                                name = 'final')(x)
-        
-        model = keras.models.Model(inputs=input,outputs=x)
-        opt=tf.keras.optimizers.Adam(lr=1e-3)
-    
-        model.compile(
-            optimizer=opt,
-            loss="sparse_categorical_crossentropy",
-            metrics=["sparse_categorical_accuracy"],
-        )
-        return model
-    
-    
-    # define model
-    model = net()
-
-    history = model.fit(trainX[:45000], 
-                        trainY[:45000], 
-                        epochs=15 if not TESTMODE else 1,
-                        batch_size=64, 
-                        validation_data=(trainX[45000:], trainY[45000:]), 
-                        verbose=0)
-    
-    #Save Network
-    model.save(path +'cifar_trained_model')
-    
-    #plot_results
-    plt.figure()
-    plt.plot(history.history['sparse_categorical_accuracy'], label = 'train')
-    plt.plot(history.history['val_sparse_categorical_accuracy'], label = 'test')
-    plt.legend()
-    plt.grid()
-    plt.title('Cifar10 - train/test accuracies')
-    plt.savefig('Saved Networks accur plot')
-    
-
-    return model 
-    
-if os.path.exists(path + 'cifar_trained_model'+this_run_name):
-    teacher = keras.models.load_model(path + 'cifar_trained_model'+this_run_name)
-
-else:
-    teacher = train_model(path, trainX, trainY)
-
+# teacher = tf.keras.models.Sequential()
+# teacher.add(fe_model)
+# teacher.add(be_model)
+#
+# opt=tf.keras.optimizers.Adam(lr=1e-3)
+# teacher.compile(
+#     optimizer=opt,
+#     loss="sparse_categorical_crossentropy",
+#     metrics=["sparse_categorical_accuracy"],
+# )
+#
+# history = teacher.fit(trainX[:45000],
+#                     trainY[:45000],
+#                     epochs=15 if not TESTMODE else 1,
+#                     batch_size=64,
+#                     validation_data=(trainX[45000:], trainY[45000:]),
+#                     verbose=0)
+#
+# #Save Network
+# teacher.save(path +'cifar_trained_model')
+#
+# #plot_results
+# plt.figure()
+# plt.plot(history.history['sparse_categorical_accuracy'], label = 'train')
+# plt.plot(history.history['val_sparse_categorical_accuracy'], label = 'test')
+# plt.legend()
+# plt.grid()
+# plt.title('Cifar10 - train/test accuracies')
+# plt.savefig('Saved Networks accur plot')
+#
+#
+# if os.path.exists(path + 'cifar_trained_model'+this_run_name):
+#     teacher = keras.models.load_model(path + 'cifar_trained_model'+this_run_name)
+# else:
+#     teacher = train_model(path, trainX, trainY)
+teacher = keras.models.load_model(parameters['teacher_net'])
 teacher.evaluate(trainX[45000:], trainY[45000:], verbose=2)
+
+
+fe_model = teacher.layers[0]
+be_model = teacher.layers[1]
 
 
 #%%
 #################### Get Layer features as a dataset ##########################
 print('making feature data')
-intermediate_layer_model = keras.Model(inputs = teacher.input,
-                                       outputs = teacher.get_layer(layer_name).output)
+intermediate_layer_model = fe_model
+decoder = be_model
 batch_size = 64
 start = 0
 end = batch_size
@@ -200,17 +229,18 @@ validation_data = []
 train_data = np.zeros([50000,res,res,num_feature])
 count = 0
 #Drow N random features from the batch and sort them in order 
-if layer_name == 'max_pool2':
-    feature_space = 64
-elif layer_name == 'max_pool3':
-    feature_space = 128
+# if layer_name == 'max_pool2':
+#     feature_space = 64
+# elif layer_name == 'max_pool3':
+#     feature_space = 128
+feature_space = 64
 feature_list = np.random.choice(np.arange(feature_space),num_feature, replace = False)
 feature_list = np.sort(feature_list)
 
 for batch in range(len(trainX)//batch_size + 1):
     count+=1
-    iintermediate_output = intermediate_layer_model(trainX[start:end]).numpy()
-    train_data[start:end,:,:] = iintermediate_output[:,:,:,feature_list]
+    intermediate_output = intermediate_layer_model(trainX[start:end]).numpy()
+    train_data[start:end,:,:] = intermediate_output[:,:,:,feature_list]
     start += batch_size
     end += batch_size
 
@@ -298,10 +328,12 @@ def save_model(net,path,parameters,checkpoint = True):
 
 student = student3(sample = sample, 
                    res = res, 
-                    activation = 'relu', 
+                    activation = parameters['student_nl'],
                     dropout = dropout, 
                     rnn_dropout = rnn_dropout,
-                    num_feature = num_feature)
+                    num_feature = num_feature,
+                   layer_norm = parameters['layer_norm_student'],
+                   conv_rnn_type = parameters['conv_rnn_type'])
 
 student.evaluate(test_dataset_x[0],
                 feature_test_data, verbose = 2)
@@ -355,53 +387,14 @@ with open(prediction_data_path + 'predictions_traject_{}'.format(this_run_name,)
 ####################### Now Let's see how good it is in classification ##########################################
 
 #Define a Student_Decoder Network that will take the Teacher weights of the last layers:   
-def Student_Decoder(layer = layer_name ):
-    
-    if layer == 'max_pool2':
-        input = keras.layers.Input(shape=(res,res,64))
-        x = keras.layers.Conv2D(128,(3,3),activation='relu', padding = 'same', 
-                            name = 'cnn3')(input)
-        x = keras.layers.Conv2D(128,(3,3),activation='relu', padding = 'same', 
-                            name = 'cnn32')(x)
-        x = keras.layers.MaxPooling2D((2, 2), 
-                            name = 'max_pool3')(x)
-    
-        x = keras.layers.Dropout(0.2)(x)
-    elif layer == 'max_pool3': 
-        input = keras.layers.Input(shape=(res,res,128))
-        x = keras.layers.Dropout(0.2)(input)
-    #Flatten and add linear layer and softmax
 
-    x = keras.layers.Flatten()(x)
-    x = keras.layers.Dense(128,activation="relu", 
-                            name = 'fc1')(x)
-    x = keras.layers.Dense(10,activation="softmax", 
-                            name = 'final')(x)
 
-    model = keras.models.Model(inputs=input,outputs=x)
-    
-    opt=tf.keras.optimizers.Adam(lr=1e-3)
-
-    model.compile(
+opt=tf.keras.optimizers.Adam(lr=1e-3)
+decoder.compile(
         optimizer=opt,
         loss="sparse_categorical_crossentropy",
         metrics=["sparse_categorical_accuracy"],
     )
-    return model
-
-decoder = Student_Decoder(layer = layer_name)
-if layer_name == 'max_pool2':
-    layers_names = ['cnn3','cnn32','fc1','final']
-elif layer_name == 'max_pool3':
-    layers_names = ['fc1','final']
-#Insert the Teachers weights to the student Decoder
-for layer in layers_names:
-    
-    teacher_weights = teacher.get_layer(layer).weights[0].numpy()
-    print(teacher_weights.shape)
-    print(decoder.get_layer(layer).weights[0].shape)
-    new_weights = [teacher_weights, teacher.get_layer(layer).weights[1].numpy()]
-    decoder.get_layer(layer).set_weights(new_weights)
 
 
 
@@ -432,19 +425,7 @@ decoder.save(home_folder +'decoder_trained_model')
 ############################## Now Let's Try and Trian the student features #####################################
 ########################### Combining the student and the decoder and training ##################################
 print('Training the student and decoder together - reinitiating the decoder before learning')
-decoder = Student_Decoder(layer = layer_name)
-if layer_name == 'max_pool2':
-    layers_names = ['cnn3','cnn32','fc1','final']
-elif layer_name == 'max_pool3':
-    layers_names = ['fc1','final']
-#Insert the Teachers weights to the student Decoder
-for layer in layers_names:
-    
-    teacher_weights = teacher.get_layer(layer).weights[0].numpy()
-    print(teacher_weights.shape)
-    print(decoder.get_layer(layer).weights[0].shape)
-    new_weights = [teacher_weights, teacher.get_layer(layer).weights[1].numpy()]
-    decoder.get_layer(layer).set_weights(new_weights)
+net_weights_reinitializer(decoder)
 
 
 
