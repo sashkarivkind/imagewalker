@@ -347,14 +347,19 @@ def create_cifar_dataset(images, labels, res, sample = 5, mixed_state = True, ad
     ts_images = []
     dvs_images = []
     q_seq = []
+    seed_list = []
     count = 0
+    if mixed_state:
+        np.random.seed(42)
     if show_fig:
         #create subplot to hold examples from the dataset
         fig, ax = plt.subplots(2,5)
         i = 0 #indexises for the subplot for image and for syclop vision
+    
     for img_num,img in enumerate(images):
         if add_seed:
-            np.random.seed(random.randint(0,add_seed))    
+            new_seed = random.randint(0,add_seed)
+            np.random.seed(new_seed)    
         orig_img = img*1
         #Set the padded image
         img=misc.build_cifar_padded(1./256*img)
@@ -383,6 +388,7 @@ def create_cifar_dataset(images, labels, res, sample = 5, mixed_state = True, ad
                 starting_point += np.random.randint(-2,3,2) 
 
             if mixed_state:
+                seed_list.append(new_seed)
                 q_sequence = np.array(steps).astype(int)
             else:
                 if count == 0:
@@ -485,7 +491,10 @@ def create_cifar_dataset(images, labels, res, sample = 5, mixed_state = True, ad
     test_dataset = cifar_dataset(ts_val, val_labels,add_traject = add_traject)
 
     if return_datasets:
-        return train_dataset, test_dataset
+        if mixed_state:
+            return train_dataset, test_dataset, seed_list
+        else:
+            return train_dataset, test_dataset
 
 def mnist_split_dataset_xy(dataset):
     n_timesteps = 5

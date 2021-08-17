@@ -136,7 +136,9 @@ def save_model(net,path,parameters,checkpoint = True):
 
 
 def student3(sample = 10, res = 8, activation = 'tanh', dropout = None, rnn_dropout = None,
-             num_feature = 1, layer_norm = False , n_layers=3, conv_rnn_type='lstm'):
+             num_feature = 1, layer_norm = False , n_layers=3, conv_rnn_type='lstm',block_size = 1):
+    #TO DO add option for different block sizes in every convcnn
+    #TO DO add skip connections in the block 
     input = keras.layers.Input(shape=(sample, res,res,3))
     if conv_rnn_type == 'lstm':
         Our_RNN_cell = keras.layers.ConvLSTM2D
@@ -147,14 +149,22 @@ def student3(sample = 10, res = 8, activation = 'tanh', dropout = None, rnn_drop
     #Define CNN
     #x = keras.layers.Conv2D(1,(3,3),activation='relu', padding = 'same', 
     #                        name = 'convLSTM1')(input)
-    x = Our_RNN_cell(32,(3,3), padding = 'same', return_sequences=True,
+    x = input
+    for ind in range(block_size):
+        x = Our_RNN_cell(32,(3,3), padding = 'same', return_sequences=True,
                                 dropout = dropout,recurrent_dropout=rnn_dropout, 
-                            name = 'convLSTM1')(input)
-    x = Our_RNN_cell(64,(3,3), padding = 'same', return_sequences=True,
-                            name = 'convLSTM2',
+                            name = 'convLSTM1{}'.format(ind))(x)
+    for ind in range(block_size):
+        x = Our_RNN_cell(64,(3,3), padding = 'same', return_sequences=True,
+                            name = 'convLSTM2{}'.format(ind),
                             dropout = dropout,recurrent_dropout=rnn_dropout,)(x)
-    x = Our_RNN_cell(num_feature,(3,3), padding = 'same',
-                            name = 'convLSTM3', activation=activation,
+    for ind in range(block_size):
+        if ind == block_size - 1:
+            return_seq = False
+        else:
+            return_seq = True
+        x = Our_RNN_cell(num_feature,(3,3), padding = 'same', return_sequences=return_seq,
+                            name = 'convLSTM3{}'.format(ind), activation=activation,
                             dropout = dropout,recurrent_dropout=rnn_dropout,)(x)
     if layer_norm:
         x = keras.layers.LayerNormalization(axis=3)(x)
@@ -169,6 +179,8 @@ def student3(sample = 10, res = 8, activation = 'tanh', dropout = None, rnn_drop
         metrics=["mean_squared_error"],
     )
     return model
+
+
 
 def student3_one_image(sample=10, activation = 'relu', dropout = None, num_feature = 1):
     input = keras.layers.Input(shape=(sample,8,8,3))
