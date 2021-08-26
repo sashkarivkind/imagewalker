@@ -36,34 +36,48 @@ def bad_res102(img,res):
     dwnsmp=cv2.resize(img,res, interpolation = cv2.INTER_CUBIC)
     return dwnsmp
 
-def create_trajectory101(starting_point,sample):
-    #starting_point = np.array([agent.max_q[0]//2,agent.max_q[1]//2])
-    steps  = []
+def create_trajectory(starting_point, sample = 5, style = 'brownian'):
+    steps = []
+    phi = np.random.randint(0.1,2*np.pi) #the angle in polar coordinates
+    speed = 0.8#np.abs(0.5 + np.random.normal(0,0.5))         #Constant added to the radios
+    r = 3
+    name_list = ['const direction + noise','ZigZag','spiral', 'brownian','degenerate']
+    speed_noise = speed * 0.2
+    phi_noise = 0.05
+    x, y = starting_point[1], starting_point[0]
+    phi_speed =  (1/8)*np.pi
+    old_style = style
     for j in range(sample):
-        steps.append(starting_point*1)
-        starting_point += np.random.randint(-5,5,2) 
-        
+        x, y = starting_point[1] + int(r * np.cos(phi)), starting_point[0]+int(r * np.sin(phi))
+        steps.append([y,x])
+        style = old_style
+        if style == 'mix':
+            old_style = 'mix'
+            style = random.sample(name_list, 1)
+        if style == 'const direction + noise':
+            r += speed + np.random.normal(-0.5,speed_noise)
+            phi_noise = 0.15
+            phi_speed = np.random.normal(0,phi_noise)
+            phi += phi_speed
+        elif style == 'ZigZag':
+            r += speed + np.random.normal(-0.5,speed_noise)
+            phi_noise = 0.005
+            phi_speed *=  -1
+            phi += phi_speed + np.random.normal(0,phi_noise)
+        elif style == 'spiral':
+            r += speed/2 + np.random.normal(-0.5,speed_noise)
+            phi_noise = 0.1
+            phi_speed = np.random.normal((2/4)*np.pi,(1/8)*np.pi)
+            factor = 1#np.random.choice([-1,1])
+            phi += factor * phi_speed
+        elif style == 'brownian':
+            r += speed/2 + np.random.normal(-0.5,speed_noise)
+            phi = np.random.randint(0.1,2*np.pi)
+        elif style == 'degenerate':
+            r += speed + np.random.normal(-0.5,speed_noise)
+            
     return steps
 
-def create_trajectory102(starting_point,sample_size):
-    '''
-    Creating a trajectory for syclop 
-    This implimantation creates a more coherent path 
-    Give N samples the function will create a path that takes three 
-    random directions. 
-    Trying with 10 samples to allow sampling.
-
-    '''
-    location = starting_point
-    trajectory_steps  = []
-    turn = int(sample_size/3) #Defined to make 3 turns in the trajectories
-    
-    #init_func = 
-    for j in range(sample_size):
-        trajectory_steps.append(location*1)
-        location += np.random.randint(-5,5,2) 
-        
-    return trajectory_steps
 #The Dataset formation
 def create_mnist_dataset(images, labels, res, sample = 5, mixed_state = True, add_traject = True,
                    trajectory_list=None,return_datasets=False, add_seed = 20, show_fig = False,
@@ -325,7 +339,8 @@ def print_traject(images, labels, res, sample = 5, mixed_state = True, add_traje
         
 def create_cifar_dataset(images, labels, res, sample = 5, mixed_state = True, add_traject = True,
                    trajectory_list=0,return_datasets=False, add_seed = True, show_fig = False,
-                   bad_res_func = bad_res102, up_sample = False):
+                   bad_res_func = bad_res102, up_sample = False, broadcast = False, 
+                   style = 'brownian', max_length = 20):
     '''
     Creates a torch dataloader object of syclop outputs 
     from a list of images and labels.
@@ -343,6 +358,9 @@ def create_cifar_dataset(images, labels, res, sample = 5, mixed_state = True, ad
     train_dataloader, test_dataloader - torch DataLoader class objects
 
     '''
+    if sample > max_length:
+        max_length = sample
+        print('max_length ({}) must be >= sample ({}), changed max_length to be == sample'.format(max_length, sample))
     count = 0
     ts_images = []
     dvs_images = []
@@ -351,6 +369,7 @@ def create_cifar_dataset(images, labels, res, sample = 5, mixed_state = True, ad
     count = 0
     if mixed_state:
         np.random.seed(42)
+        new_seed = 42
     if show_fig:
         #create subplot to hold examples from the dataset
         fig, ax = plt.subplots(2,5)
@@ -382,10 +401,9 @@ def create_cifar_dataset(images, labels, res, sample = 5, mixed_state = True, ad
             if trajectory_list:
                 np.random.seed(trajectory_list)
             starting_point = np.array([agent.max_q[0]//2,agent.max_q[1]//2])
-            steps  = []
-            for j in range(sample):
-                steps.append(starting_point*1)
-                starting_point += np.random.randint(-2,3,2) 
+            steps = create_trajectory(starting_point= starting_point, 
+                                      sample = sample,
+                                      style = style)
 
             if mixed_state:
                 seed_list.append(new_seed)
@@ -420,16 +438,34 @@ def create_cifar_dataset(images, labels, res, sample = 5, mixed_state = True, ad
                 plt.title(labels[count])
                 i+=1
             
-
-        imim = np.array(imim)
+        #imim shape [sample,res,res,3]
+        imim = np.array(imim)        
         dimim = np.array(dimim)
         #Add current proccessed image to lists
         ts_images.append(imim)
         dvs_images.append(dimim)
-        q_seq.append(q_sequence/img_size[0])
+        if broadcast:
+            broadcast_place = np.ones(shape = [sample,res,res,2])
+            for i in range(sample):
+                broadcast_place[i,:,:,0] *= q_sequence[i,0]
+                broadcast_place[i,:,:,1] *= q_sequence[i,1]
+            q_seq.append(broadcast_place/img_size[0])
+        else:
+            q_seq.append(q_sequence/img_size[0])
         count += 1
     print(q_sequence)
-
+    #pre pad all images to max_length
+    for idx, image in enumerate(ts_images):
+        image_base = np.zeros(shape = [max_length, res, res, 3])
+        if broadcast:
+            seq_base = np.zeros(shape = [max_length, res, res, 2])
+        else:
+            seq_base = np.zeros([max_length, 2])
+        image_base[-len(imim):] = imim
+        seq_base[-len(q_sequence):] = q_seq[idx]
+        ts_images[idx] = image_base * 1
+        q_seq[idx] = seq_base * 1
+        
     if add_traject: #If we add the trjectories the train list will become a list of lists, the images and the 
         #corrosponding trajectories, we will change the dataset structure as well. Note the the labels stay the same.
         ts_train = (ts_images[:45000], q_seq[:45000]) 

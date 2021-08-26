@@ -83,7 +83,6 @@ def full_learning_dataset_update(student_history,
         dataframe = pd.read_pickle('/home/labs/ahissarlab/orra/imagewalker/teacher_student/feature_learning/{}'.format(file_name))
     else:
         dataframe = pd.DataFrame()
-    
     values_to_add = parameters
     values_to_add['net_name'] = net.name
     values_to_add['student_min_test_error'] = min(student_history.history['val_mean_squared_error'])
@@ -98,6 +97,38 @@ def full_learning_dataset_update(student_history,
     values_to_add['full_max_train_error'] = max(full_history.history['sparse_categorical_accuracy'])
     values_to_add['full_train_error'] = [full_history.history['sparse_categorical_accuracy']]
     values_to_add['full_test_error'] = [full_history.history['val_sparse_categorical_accuracy']]
+    dataframe = dataframe.append(values_to_add, ignore_index = True)
+
+    dataframe.to_pickle('/home/labs/ahissarlab/orra/imagewalker/teacher_student/feature_learning/{}'.format(file_name))
+
+def traject_learning_dataset_update(train_accur,
+                                    test_accur, 
+                                 decoder_history,
+                                 #full_history,
+                                 net, parameters, name = '_'):
+    '''
+    TODO combine all write to dataframe functions! 
+    
+    '''
+    file_name = 'summary_dataframe_feature_learning_{}.pkl'.format(name)
+    if os.path.isfile('/home/labs/ahissarlab/orra/imagewalker/teacher_student/feature_learning/{}'.format(file_name)):
+        dataframe = pd.read_pickle('/home/labs/ahissarlab/orra/imagewalker/teacher_student/feature_learning/{}'.format(file_name))
+    else:
+        dataframe = pd.DataFrame()
+    values_to_add = parameters
+    values_to_add['net_name'] = net.name
+    values_to_add['student_min_test_error'] = min(test_accur)
+    values_to_add['student_min_train_error'] = min(train_accur)
+    values_to_add['student_train_error'] = train_accur
+    values_to_add['student_test_error'] = test_accur
+    values_to_add['decoder_max_test_error'] = max(decoder_history.history['val_sparse_categorical_accuracy'])
+    values_to_add['decoder_max_train_error'] = max(decoder_history.history['sparse_categorical_accuracy'])
+    values_to_add['decoder_train_error'] = [decoder_history.history['sparse_categorical_accuracy']]
+    values_to_add['decoder_test_error'] = [decoder_history.history['val_sparse_categorical_accuracy']]
+    # values_to_add['full_max_test_error'] = max(full_history.history['val_sparse_categorical_accuracy'])
+    # values_to_add['full_max_train_error'] = max(full_history.history['sparse_categorical_accuracy'])
+    # values_to_add['full_train_error'] = [full_history.history['sparse_categorical_accuracy']]
+    # values_to_add['full_test_error'] = [full_history.history['val_sparse_categorical_accuracy']]
     dataframe = dataframe.append(values_to_add, ignore_index = True)
 
     dataframe.to_pickle('/home/labs/ahissarlab/orra/imagewalker/teacher_student/feature_learning/{}'.format(file_name))
@@ -136,20 +167,28 @@ def save_model(net,path,parameters,checkpoint = True):
 
 
 def student3(sample = 10, res = 8, activation = 'tanh', dropout = None, rnn_dropout = None,
-             num_feature = 1, layer_norm = False , n_layers=3, conv_rnn_type='lstm',block_size = 1):
+             num_feature = 1, layer_norm = False , n_layers=3, conv_rnn_type='lstm',block_size = 1,
+             add_coordinates = False, time_pool = False):
     #TO DO add option for different block sizes in every convcnn
     #TO DO add skip connections in the block 
-    input = keras.layers.Input(shape=(sample, res,res,3))
+    inputA = keras.layers.Input(shape=(sample, res,res,3))
+    if add_coordinates:
+        inputB = keras.layers.Input(shape=(sample,res,res,2))
+    else:
+        inputB = keras.layers.Input(shape=(sample,2))
     if conv_rnn_type == 'lstm':
         Our_RNN_cell = keras.layers.ConvLSTM2D
     elif  conv_rnn_type == 'gru':
         Our_RNN_cell = ConvGRU2D
     else:
         error("not supported type of conv rnn cell")
-    #Define CNN
-    #x = keras.layers.Conv2D(1,(3,3),activation='relu', padding = 'same', 
-    #                        name = 'convLSTM1')(input)
-    x = input
+
+    #Broadcast the coordinates to a [res,res,2] matrix and concat to x
+    if add_coordinates:
+        x = keras.layers.Concatenate()([inputA,inputB])
+    else: 
+        x = inputA
+    print(x.shape)
     for ind in range(block_size):
         x = Our_RNN_cell(32,(3,3), padding = 'same', return_sequences=True,
                                 dropout = dropout,recurrent_dropout=rnn_dropout, 
@@ -160,17 +199,25 @@ def student3(sample = 10, res = 8, activation = 'tanh', dropout = None, rnn_drop
                             dropout = dropout,recurrent_dropout=rnn_dropout,)(x)
     for ind in range(block_size):
         if ind == block_size - 1:
-            return_seq = False
+            if time_pool:
+                return_seq = True
+            else:
+                return_seq = False
         else:
             return_seq = True
         x = Our_RNN_cell(num_feature,(3,3), padding = 'same', return_sequences=return_seq,
                             name = 'convLSTM3{}'.format(ind), activation=activation,
                             dropout = dropout,recurrent_dropout=rnn_dropout,)(x)
+    if time_pool:
+        if time_pool == 'max_pool':
+            x = tf.keras.layers.MaxPooling3D(pool_size=(sample, 1, 1))(x)
+        elif time_pool == 'average_pool':
+            x = tf.keras.layers.AveragePooling3D(pool_size=(sample, 1, 1))(x)
     if layer_norm:
         x = keras.layers.LayerNormalization(axis=3)(x)
 
     print(x.shape)
-    model = keras.models.Model(inputs=input,outputs=x, name = 'student_3')
+    model = keras.models.Model(inputs=[inputA,inputB],outputs=x, name = 'student_3')
     opt=tf.keras.optimizers.Adam(lr=1e-3)
 
     model.compile(
@@ -179,6 +226,7 @@ def student3(sample = 10, res = 8, activation = 'tanh', dropout = None, rnn_drop
         metrics=["mean_squared_error"],
     )
     return model
+
 
 
 
@@ -227,24 +275,3 @@ def student32(sample = 10):
 
     return model
 
-
-def student3_cnn(sample = 10):
-    input = keras.layers.Input(shape=(sample, 8,8,3))
-    
-    #Define CNN
-    #x = keras.layers.Conv2D(1,(3,3),activation='relu', padding = 'same', 
-    #                        name = 'convLSTM1')(input)
-    x = keras.layers.ConvLSTM2D(32,(3,3), padding = 'same', return_sequences=True,
-                            name = 'convLSTM1')(input)
-    x = keras.layers.ConvLSTM2D(64,(3,3), padding = 'same', return_sequences=True,
-                            name = 'convLSTM2')(x)
-    x = keras.layers.ConvLSTM2D(128,(3,3), padding = 'same', return_sequences=True,
-                            name = 'convLSTM3')(x)
-    x = tf.transpose(x,[0,2,3,1,4])
-    x = keras.layers.Reshape((8,8,sample * 128))(x)
-    x = keras.layers.Conv2D(1, (3,3), padding = 'same', activation = 'relu')(x)
-    
-    print(x.shape)
-    model = keras.models.Model(inputs=input,outputs=x, name = 'student_3_cnn')
-
-    return model

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-
+added the explore relations part after 735561
 """
 
 import os 
@@ -21,7 +21,7 @@ import pandas as pd
 import time
 import pickle
 import argparse
-from feature_learning_utils import  student3,  write_to_file, full_learning_dataset_update,  net_weights_reinitializer
+from feature_learning_utils import  student3,  write_to_file, traject_learning_dataset_update,  net_weights_reinitializer
 from keras_utils import create_cifar_dataset, split_dataset_xy
 
 print(os.getcwd() + '/')
@@ -43,9 +43,10 @@ parser.add_argument('--testmode', dest='testmode', action='store_true')
 parser.add_argument('--no-testmode', dest='testmode', action='store_false')
 
 ### student parameters
-parser.add_argument('--epochs', default=50, type=int, help='num training epochs')
+parser.add_argument('--epochs', default=1, type=int, help='num training epochs')
 parser.add_argument('--int_epochs', default=1, type=int, help='num internal training epochs')
 parser.add_argument('--num_feature', default=64, type=int, help='legacy to be discarded')
+parser.add_argument('--time_pool', default=0, help='time dimention pooling to use - max_pool, average_pool, 0')
 
 parser.add_argument('--student_block_size', default=1, type=int, help='number of repetition of each convlstm block')
 parser.add_argument('--conv_rnn_type', default='lstm', type=str, help='conv_rnn_type')
@@ -62,10 +63,14 @@ parser.add_argument('--no-layer_norm_student', dest='layer_norm_student', action
 parser.add_argument('--trajectory_index', default=0, type=int, help='trajectory index - set to 0 because we use multiple trajectories')
 parser.add_argument('--sample', default=5, type=int, help='sample')
 parser.add_argument('--res', default=8, type=int, help='resolution')
-parser.add_argument('--trajectories_num', default=0, type=int, help='number of trajectories to use')
+parser.add_argument('--trajectories_num', default=10, type=int, help='number of trajectories to use')
+parser.add_argument('--broadcast', default=True, type=bool, help='integrate the coordinates by broadcasting them as extra dimentions')
+parser.add_argument('--style', default='brownain', type=str, help='choose syclops style of motion')
+parser.add_argument('--max_length', default=5, type=int, help='choose syclops max trajectory length')
+
 
 ### teacher network parameters
-parser.add_argument('--teacher_net', default=None, type=str, help='path to pretrained teacher net')
+parser.add_argument('--teacher_net', default='/home/orram/Documents/GitHub/imagewalker/teacher_student/model_510046__1628691784.hdf', type=str, help='path to pretrained teacher net')
 
 parser.add_argument('--resblocks', default=3, type=int, help='resblocks')
 parser.add_argument('--last_layer_size', default=128, type=int, help='last_layer_size')
@@ -168,7 +173,7 @@ be_model = teacher.layers[1]
 print('making feature data')
 intermediate_layer_model = fe_model
 decoder = be_model
-batch_size = 64
+batch_size = 32
 start = 0
 end = batch_size
 train_data = []
@@ -256,8 +261,8 @@ def save_model(net,path,parameters,checkpoint = True):
     net.save_weights(keras_weights_path + 'keras_weights_{}'.format(this_run_name))
     #LOADING WITH - load_status = sequential_model.load_weights("ckpt")
     
-
-student = student3(sample = sample, 
+#%%
+student = student3(sample = parameters['max_length'], 
                    res = res, 
                     activation = parameters['student_nl'],
                     dropout = dropout, 
@@ -265,7 +270,9 @@ student = student3(sample = sample,
                     num_feature = num_feature,
                    layer_norm = parameters['layer_norm_student'],
                    conv_rnn_type = parameters['conv_rnn_type'],
-                   block_size = parameters['student_block_size'])
+                   block_size = parameters['student_block_size'],
+                   add_coordinates = parameters['broadcast'],
+                   time_pool = parameters['time_pool'])
 
 train_accur = []
 test_accur = []
@@ -273,9 +280,14 @@ for epoch in range(epochs):
     ############################## load syclop data #################################
     print('\nReloading Syclop Data')
     
-    train_dataset, test_dataset = create_cifar_dataset(images, labels,res = res,
+    train_dataset, test_dataset, seed_list = create_cifar_dataset(images, labels,res = res,
                                     sample = sample, return_datasets=True, 
-                                    mixed_state = True, add_seed = trajectories_num,trajectory_list = 0
+                                    mixed_state = True, 
+                                    add_seed = trajectories_num,
+                                    trajectory_list = 0,
+                                    broadcast=parameters['broadcast'],
+                                    style = parameters['style'],
+                                    max_length=parameters['max_length']
                                     )
     train_dataset_x, train_dataset_y = split_dataset_xy(train_dataset, sample = sample)
     test_dataset_x, test_dataset_y = split_dataset_xy(test_dataset,sample = sample)
@@ -283,14 +295,14 @@ for epoch in range(epochs):
     del test_dataset
     gc.collect()
     if epoch == 0:
-        student.evaluate(test_dataset_x[0],
+        student.evaluate(test_dataset_x,
                     feature_test_data, verbose = 2)
     print('{}/{}'.format(epoch+1,epochs))
-    student_history = student.fit(train_dataset_x[0],
+    student_history = student.fit(train_dataset_x,
                     feature_train_data,
                     batch_size = 32,
                     epochs = int_epochs,
-                    validation_data=(test_dataset_x[0], feature_test_data),
+                    validation_data=(test_dataset_x, feature_test_data),
                     verbose = verbose,
                     callbacks=[model_checkpoint_callback,lr_reducer,early_stopper]) #checkpoints won't really work
     if not epoch == epochs - 1:
@@ -306,9 +318,10 @@ print('{} test:'.format(student.name), test_accur)
 save_model(student, save_model_path, parameters, checkpoint = False)
 #student.load_weights(checkpoint_filepath) # todo!
 save_model(student, save_model_path, parameters, checkpoint = True)
-student.evaluate(test_dataset_x[0],
+student.evaluate(test_dataset_x,
                 feature_test_data, verbose = 2)
 
+#%%
 student_test_data = np.zeros([5000,res,res,num_feature])
 student_train_data = np.zeros([45000,res,res,num_feature])
 start = 0
@@ -317,7 +330,7 @@ count = 0
 print('\nExtracting student learnt features')
 for batch in range(len(train_dataset_x[0])//batch_size + 1):
     count+=1
-    train_temp = student(train_dataset_x[0][start:end]).numpy()
+    train_temp = student((train_dataset_x[0][start:end],train_dataset_x[1][start:end])).numpy()
     student_train_data[start:end,:,:,:] = train_temp[:,:,:,:]
     start += batch_size
     end += batch_size
@@ -326,7 +339,7 @@ end = batch_size
 count = 0
 for batch in range(len(test_dataset_x[0])//batch_size + 1):
     count+=1
-    test_temp = student(test_dataset_x[0][start:end]).numpy()
+    test_temp = student((test_dataset_x[0][start:end],test_dataset_x[1][start:end])).numpy()
     student_test_data[start:end,:,:,:] = test_temp[:,:,:,:]
     start += batch_size
     end += batch_size
@@ -379,20 +392,25 @@ decoder_history = decoder.fit(student_train_data,
 
 home_folder = save_model_path + '{}_saved_models/'.format(this_run_name)
 decoder.save(home_folder +'decoder_trained_model')
-############################## Now Let's Try and Trian the student features #####################################
-########################### Combining the student and the decoder and training ##################################
-print('\nTraining the student and decoder together - reinitiating the decoder before learning')
-net_weights_reinitializer(decoder)
-
-
-
-def full_student(student, decoder):
-    input = keras.layers.Input(shape=(sample, res,res,3))\
-        
-    student_features = student(input)
+#%%
+############################## Explore the relations between the ################################################
+############################## trajectories and the accuracy of  ################################################
+###################################### the test set. ############################################################
+# We'll ask two questions:
+    #1) For different inintialization of the test set, will we see variance in 
+    #   accuracy on the test wet? 
+    #2) If we record and label the correct answers for each trajectory, will
+    #   we find trajectories that are better? i.e. easier tp classify? 
+def full_student(student, decoder, add_coordinates = False):
+    inputA = keras.layers.Input(shape=(sample, res,res,3))
+    if add_coordinates:
+        inputB = keras.layers.Input(shape=(sample,res,res,2))
+    else:
+        inputB = keras.layers.Input(shape=(sample,2))
+    student_features = student((inputA,inputB))
     decoder_prediction = decoder(student_features)
     
-    model = keras.models.Model(inputs=input,outputs=decoder_prediction)
+    model = keras.models.Model(inputs=[inputA,inputB],outputs=decoder_prediction)
     
     opt=tf.keras.optimizers.Adam(lr=1e-3)
 
@@ -404,15 +422,97 @@ def full_student(student, decoder):
     
     return model 
 
-full_student_net = full_student(student, decoder)
+full_student_net = full_student(student, decoder,add_coordinates = parameters['broadcast'])
+seed_unique = []
+count_corrects = {}
+var_test_accur = []
+num_tests = 20
+for var_test in range(num_tests):
+    if trajectories_num == 0:
+        break
+    train_dataset, test_dataset, seed_list = create_cifar_dataset(images, labels,res = res,
+                                    sample = sample, return_datasets=True, 
+                                    mixed_state = True, 
+                                    add_seed = trajectories_num,
+                                    trajectory_list = 0,
+                                    broadcast = parameters['broadcast']
+                                    )
+    test_dataset_x, test_dataset_y = split_dataset_xy(test_dataset,sample = sample)
+    del train_dataset
+    del test_dataset
+    gc.collect()
+    test_seed_list = np.array(seed_list[45000:])
+    temp_seed_uniqe, counts = np.unique(test_seed_list, return_counts = True)
+    temp_dict = dict(zip(temp_seed_uniqe, counts))
+    seed_unique += [i for i in temp_seed_uniqe if i not in seed_unique]
+    corrects = np.nonzero(np.argmax(full_student_net.predict(test_dataset_x),1) == trainY[45000:].reshape((-1,)))[0]
+    temp_accur = len(corrects)/len(trainY[45000:])
+    var_test_accur.append(temp_accur)
+    correct_seeds = test_seed_list[corrects]
+    #TODO this does not distinguish between the particular image and class and 
+    #counts in general how many correct answers each trajectory has. We can try 
+    # to also consider the images, perhaps there are some really dificults. 
+    
+    #Count the number of correct answers per seed
+    new_temp_seed_unique, count_corrects_by_seed = np.unique(correct_seeds, return_counts = True)
+    #Now let's take the percentage, divide by the number of trials (20) and add to count_corrects
+    for indx, seed in enumerate(new_temp_seed_unique):
+        if seed in count_corrects.keys():
+            count_corrects[seed] += count_corrects_by_seed[indx]/temp_dict[seed]/num_tests
+        else:
+            count_corrects[seed] = count_corrects_by_seed[indx]/temp_dict[seed]/num_tests
+    
 
-full_history = full_student_net.fit(train_dataset_x[0],
-                       trainY[:45000],
-                       epochs = 10  if not TESTMODE else 1,
-                       batch_size = 64,
-                       validation_data = (test_dataset_x[0], trainY[45000:]),
-                       verbose = 2,
-                       callbacks=[lr_reducer,early_stopper],)
+    del test_dataset_x
+    gc.collect()
+#%%
+print(count_corrects)
+ymax = max(count_corrects.values())
+ymin = min(count_corrects.values())
+print('\nDifferent accuracies of runs')
+print(var_test_accur)
+parameters['count_corrects'] = count_corrects
+parameters['different_test_trajectories'] = var_test_accur
+plt.figure()
+plt.bar(count_corrects.keys(), count_corrects.values(), width = 1 )
+plt.ylim(ymin - 3, ymax + 3)
+plt.title('avarage percent of correct per seed')
+plt.savefig('traject_variance {}'.format(this_run_name))
+############################## Now Let's Try and Trian the student features #####################################
+########################### Combining the student and the decoder and training ##################################
+# print('\nTraining the student and decoder together - reinitiating the decoder before learning')
+# net_weights_reinitializer(decoder)
+
+
+
+# def full_student(student, decoder):
+#     input = keras.layers.Input(shape=(sample, res,res,3))\
+        
+#     student_features = student(input)
+#     decoder_prediction = decoder(student_features)
+    
+#     model = keras.models.Model(inputs=input,outputs=decoder_prediction)
+    
+#     opt=tf.keras.optimizers.Adam(lr=1e-3)
+
+#     model.compile(
+#         optimizer=opt,
+#         loss="sparse_categorical_crossentropy",
+#         metrics=["sparse_categorical_accuracy"],
+#     )
+    
+#     return model 
+
+# full_student_net = full_student(student, decoder)
+
+# full_history = full_student_net.fit(train_dataset_x[0],
+#                        trainY[:45000],
+#                        epochs = 10  if not TESTMODE else 1,
+#                        batch_size = 64,
+#                        validation_data = (test_dataset_x[0], trainY[45000:]),
+#                        verbose = 2,
+#                        callbacks=[lr_reducer,early_stopper],)
+
 
 #full_student_net.save(home_folder +'full_trained_model')   
-# full_learning_dataset_update(student_history, decoder_history, full_history, student,parameters, name = 'full_train_102_{}'.format(this_run_name))
+traject_learning_dataset_update(train_accur,test_accur, decoder_history, student,parameters, name = 'full_train_102')
