@@ -45,11 +45,10 @@ def create_trajectory(starting_point, sample = 5, style = 'brownian'):
     speed_noise = speed * 0.2
     phi_noise = 0.05
     x, y = starting_point[1], starting_point[0]
+    steps.append([y,x])
     phi_speed =  (1/8)*np.pi
     old_style = style
-    for j in range(sample):
-        x, y = starting_point[1] + int(r * np.cos(phi)), starting_point[0]+int(r * np.sin(phi))
-        steps.append([y,x])
+    for j in range(sample-1):
         style = old_style
         if style == 'mix':
             old_style = 'mix'
@@ -75,6 +74,14 @@ def create_trajectory(starting_point, sample = 5, style = 'brownian'):
             phi = np.random.randint(0.1,2*np.pi)
         elif style == 'degenerate':
             r += speed + np.random.normal(-0.5,speed_noise)
+        elif style == 'old':
+            
+            starting_point += np.random.randint(-2,3,2) 
+            r = 0
+            phi = 0
+        x, y = starting_point[1] + int(r * np.cos(phi)), starting_point[0]+int(r * np.sin(phi))
+        steps.append([y,x])
+        
             
     return steps
 
@@ -461,7 +468,7 @@ def create_cifar_dataset(images, labels, res, sample = 5, mixed_state = True, ad
             seq_base = np.zeros(shape = [max_length, res, res, 2])
         else:
             seq_base = np.zeros([max_length, 2])
-        image_base[-len(imim):] = imim
+        image_base[-len(imim):] = image
         seq_base[-len(q_sequence):] = q_seq[idx]
         ts_images[idx] = image_base * 1
         q_seq[idx] = seq_base * 1

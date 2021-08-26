@@ -210,7 +210,9 @@ def student3(sample = 10, res = 8, activation = 'tanh', dropout = None, rnn_drop
         x = Our_RNN_cell(num_feature,(3,3), padding = 'same', return_sequences=return_seq,
                             name = 'convLSTM3{}'.format(ind), activation=activation,
                             dropout = dropout,recurrent_dropout=rnn_dropout,)(x)
+    print(return_seq)
     if time_pool:
+        print(time_pool)
         if time_pool == 'max_pool':
             x = tf.keras.layers.MaxPooling3D(pool_size=(sample, 1, 1))(x)
         elif time_pool == 'average_pool':

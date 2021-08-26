@@ -64,7 +64,7 @@ parser.add_argument('--trajectory_index', default=0, type=int, help='trajectory 
 parser.add_argument('--sample', default=5, type=int, help='sample')
 parser.add_argument('--res', default=8, type=int, help='resolution')
 parser.add_argument('--trajectories_num', default=10, type=int, help='number of trajectories to use')
-parser.add_argument('--broadcast', default=True, type=bool, help='integrate the coordinates by broadcasting them as extra dimentions')
+parser.add_argument('--broadcast', default=0, type=int, help='integrate the coordinates by broadcasting them as extra dimentions')
 parser.add_argument('--style', default='brownain', type=str, help='choose syclops style of motion')
 parser.add_argument('--max_length', default=5, type=int, help='choose syclops max trajectory length')
 
@@ -435,7 +435,9 @@ for var_test in range(num_tests):
                                     mixed_state = True, 
                                     add_seed = trajectories_num,
                                     trajectory_list = 0,
-                                    broadcast = parameters['broadcast']
+                                    broadcast = parameters['broadcast'], 
+                                    style = parameters['style'],
+                                    max_length=parameters['max_length']
                                     )
     test_dataset_x, test_dataset_y = split_dataset_xy(test_dataset,sample = sample)
     del train_dataset
@@ -515,4 +517,4 @@ plt.savefig('traject_variance {}'.format(this_run_name))
 
 
 #full_student_net.save(home_folder +'full_trained_model')   
-traject_learning_dataset_update(train_accur,test_accur, decoder_history, student,parameters, name = 'full_train_102')
+traject_learning_dataset_update(train_accur,test_accur, decoder_history, student,parameters, name = 'full_train_103')
