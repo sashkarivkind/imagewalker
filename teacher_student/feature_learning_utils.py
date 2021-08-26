@@ -171,6 +171,8 @@ def student3(sample = 10, res = 8, activation = 'tanh', dropout = None, rnn_drop
              add_coordinates = False, time_pool = False):
     #TO DO add option for different block sizes in every convcnn
     #TO DO add skip connections in the block 
+    if time_pool == '0':
+        time_pool = 0 
     inputA = keras.layers.Input(shape=(sample, res,res,3))
     if add_coordinates:
         inputB = keras.layers.Input(shape=(sample,res,res,2))
