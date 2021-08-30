@@ -65,7 +65,12 @@ parser.add_argument('--testmode', dest='testmode', action='store_true')
 parser.add_argument('--no-testmode', dest='testmode', action='store_false')
 
 ### student parameters
+parser.add_argument('--epochs', default=1, type=int, help='num training epochs')
 parser.add_argument('--num_feature', default=64, type=int, help='legacy to be discarded')
+parser.add_argument('--time_pool', default=0, help='time dimention pooling to use - max_pool, average_pool, 0')
+
+parser.add_argument('--student_block_size', default=1, type=int, help='number of repetition of each convlstm block')
+
 
 parser.add_argument('--conv_rnn_type', default='lstm', type=str, help='conv_rnn_type')
 parser.add_argument('--student_nl', default='relu', type=str, help='non linearity')
@@ -81,6 +86,9 @@ parser.add_argument('--no-layer_norm_student', dest='layer_norm_student', action
 parser.add_argument('--trajectory_index', default=40, type=int, help='trajectory index')
 parser.add_argument('--sample', default=5, type=int, help='sample')
 parser.add_argument('--res', default=8, type=int, help='resolution')
+parser.add_argument('--broadcast', default=0, type=int, help='integrate the coordinates by broadcasting them as extra dimentions')
+parser.add_argument('--style', default='brownain', type=str, help='choose syclops style of motion')
+parser.add_argument('--max_length', default=5, type=int, help='choose syclops max trajectory length')
 
 ### teacher network parameters
 parser.add_argument('--teacher_net', default=None, type=str, help='path to pretrained teacher net')
@@ -260,14 +268,17 @@ print('loading Syclop Data')
 
 train_dataset, test_dataset = create_cifar_dataset(images, labels,res = res,
                                 sample = sample, return_datasets=True, 
-                                mixed_state = False, add_seed = 0,trajectory_list = trajectory_index
-                                )
+                                mixed_state = False, add_seed = 0,
+                                trajectory_list = trajectory_index,
+                                style = parameters['style'],
+                                broadcast = parameters['broadcast'],
+                                max_length = parameters['max_length'])
 train_dataset_x, train_dataset_y = split_dataset_xy(train_dataset, sample = sample)
 test_dataset_x, test_dataset_y = split_dataset_xy(test_dataset,sample = sample)
 
 #%%
 ##################### Define Student #########################################
-epochs = 50
+epochs = parameters['epochs']
 verbose = 2
 evaluate_prediction_size = 150
 prediction_data_path = path +'predictions/'
@@ -333,7 +344,11 @@ student = student3(sample = sample,
                     rnn_dropout = rnn_dropout,
                     num_feature = num_feature,
                    layer_norm = parameters['layer_norm_student'],
-                   conv_rnn_type = parameters['conv_rnn_type'])
+                   conv_rnn_type = parameters['conv_rnn_type'],
+                   time_pool = parameters['time_pool'],
+                   add_coordinates = parameters['broadcast'],
+                   block_size = parameters['']
+                   )
 
 student.evaluate(test_dataset_x[0],
                 feature_test_data, verbose = 2)

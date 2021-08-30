@@ -217,6 +217,7 @@ def student3(sample = 10, res = 8, activation = 'tanh', dropout = None, rnn_drop
             x = tf.keras.layers.MaxPooling3D(pool_size=(sample, 1, 1))(x)
         elif time_pool == 'average_pool':
             x = tf.keras.layers.AveragePooling3D(pool_size=(sample, 1, 1))(x)
+        x = tf.squeeze(x,1)
     if layer_norm:
         x = keras.layers.LayerNormalization(axis=3)(x)
 

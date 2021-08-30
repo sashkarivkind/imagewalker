@@ -66,6 +66,7 @@ parser.add_argument('--res', default=8, type=int, help='resolution')
 parser.add_argument('--trajectories_num', default=10, type=int, help='number of trajectories to use')
 parser.add_argument('--broadcast', default=0, type=int, help='integrate the coordinates by broadcasting them as extra dimentions')
 parser.add_argument('--style', default='brownain', type=str, help='choose syclops style of motion')
+parser.add_argument('--noise', default=0.15, type=float, help='added noise to the const_p_noise style')
 parser.add_argument('--max_length', default=5, type=int, help='choose syclops max trajectory length')
 
 
@@ -131,6 +132,7 @@ run_index = parameters['run_index']
 dropout = parameters['dropout']
 rnn_dropout = parameters['rnn_dropout']
 this_run_name = parameters['run_name_prefix'] + '_j' + lsbjob + '_t' + str(int(time.time()))
+parameters['this_run_name'] = this_run_name
 epochs = parameters['epochs']
 int_epochs = parameters['int_epochs']
 student_block_size = parameters['student_block_size']
@@ -287,7 +289,8 @@ for epoch in range(epochs):
                                     trajectory_list = 0,
                                     broadcast=parameters['broadcast'],
                                     style = parameters['style'],
-                                    max_length=parameters['max_length']
+                                    max_length=parameters['max_length'], 
+                                    noise = parameters['noise'],
                                     )
     train_dataset_x, train_dataset_y = split_dataset_xy(train_dataset, sample = sample)
     test_dataset_x, test_dataset_y = split_dataset_xy(test_dataset,sample = sample)
@@ -477,9 +480,23 @@ parameters['count_corrects'] = count_corrects
 parameters['different_test_trajectories'] = var_test_accur
 plt.figure()
 plt.bar(count_corrects.keys(), count_corrects.values(), width = 1 )
-plt.ylim(ymin - 3, ymax + 3)
+plt.ylim(ymin - 0.03, ymax + 0.03)
 plt.title('avarage percent of correct per seed')
 plt.savefig('traject_variance {}'.format(this_run_name))
+
+############ Test the best trajectory,make it the only trajectory ############
+traject_seed = np.argmax(list(count_corrects.values()))
+_, test_dataset = create_cifar_dataset(images, labels,res = res,
+                                    sample = sample, return_datasets=True, 
+                                    mixed_state = False, 
+                                    add_seed = 1,
+                                    trajectory_list = traject_seed,
+                                    broadcast = parameters['broadcast'], 
+                                    style = parameters['style'],
+                                    max_length=parameters['max_length']
+                                    )
+test_dataset_x, test_dataset_y = split_dataset_xy(test_dataset,sample = sample)
+full_student_net.evaluate(test_dataset_x,trainY[45000:],verbose = 2,)
 ############################## Now Let's Try and Trian the student features #####################################
 ########################### Combining the student and the decoder and training ##################################
 # print('\nTraining the student and decoder together - reinitiating the decoder before learning')

@@ -36,7 +36,7 @@ def bad_res102(img,res):
     dwnsmp=cv2.resize(img,res, interpolation = cv2.INTER_CUBIC)
     return dwnsmp
 
-def create_trajectory(starting_point, sample = 5, style = 'brownian'):
+def create_trajectory(starting_point, sample = 5, style = 'brownian', noise = 0.15):
     steps = []
     phi = np.random.randint(0.1,2*np.pi) #the angle in polar coordinates
     speed = 0.8#np.abs(0.5 + np.random.normal(0,0.5))         #Constant added to the radios
@@ -53,9 +53,9 @@ def create_trajectory(starting_point, sample = 5, style = 'brownian'):
         if style == 'mix':
             old_style = 'mix'
             style = random.sample(name_list, 1)
-        if style == 'const direction + noise':
+        if style == 'const_p_noise':
             r += speed + np.random.normal(-0.5,speed_noise)
-            phi_noise = 0.15
+            phi_noise = noise
             phi_speed = np.random.normal(0,phi_noise)
             phi += phi_speed
         elif style == 'ZigZag':
@@ -68,6 +68,12 @@ def create_trajectory(starting_point, sample = 5, style = 'brownian'):
             phi_noise = 0.1
             phi_speed = np.random.normal((2/4)*np.pi,(1/8)*np.pi)
             factor = 1#np.random.choice([-1,1])
+            phi += factor * phi_speed
+        elif style == 'big_steps':
+            r += speed/2 + np.random.normal(-0.5,speed_noise)
+            phi_noise = 0.1
+            phi_speed = np.random.normal((2/4)*np.pi,(1/8)*np.pi)
+            factor = np.random.choice([-1,1])
             phi += factor * phi_speed
         elif style == 'brownian':
             r += speed/2 + np.random.normal(-0.5,speed_noise)
@@ -347,7 +353,7 @@ def print_traject(images, labels, res, sample = 5, mixed_state = True, add_traje
 def create_cifar_dataset(images, labels, res, sample = 5, mixed_state = True, add_traject = True,
                    trajectory_list=0,return_datasets=False, add_seed = True, show_fig = False,
                    bad_res_func = bad_res102, up_sample = False, broadcast = False, 
-                   style = 'brownian', max_length = 20):
+                   style = 'brownian', noise = 0.15, max_length = 20):
     '''
     Creates a torch dataloader object of syclop outputs 
     from a list of images and labels.
@@ -410,7 +416,8 @@ def create_cifar_dataset(images, labels, res, sample = 5, mixed_state = True, ad
             starting_point = np.array([agent.max_q[0]//2,agent.max_q[1]//2])
             steps = create_trajectory(starting_point= starting_point, 
                                       sample = sample,
-                                      style = style)
+                                      style = style,
+                                       noise = noise)
 
             if mixed_state:
                 seed_list.append(new_seed)
