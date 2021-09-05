@@ -202,7 +202,7 @@ def load_student(path = '/home/orram/Documents/GitHub/imagewalker/teacher_studen
             numpy_student.get_layer(layer_name).set_weights(saved_weights)
             layer_index += 3
             
-    return numpy_student
+    return numpy_student, parameters
 
 def student3(sample = 10, res = 8, activation = 'tanh', dropout = None, rnn_dropout = None,
              num_feature = 1, layer_norm = False , n_layers=3, conv_rnn_type='lstm',block_size = 1,
