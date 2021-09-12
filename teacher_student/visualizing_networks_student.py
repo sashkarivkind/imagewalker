@@ -28,8 +28,8 @@ import pandas as pd
 import time
 import pickle
 import argparse
-from feature_learning_utils import  student3,  write_to_file, traject_learning_dataset_update,  net_weights_reinitializer
-from keras_utils import create_cifar_dataset, split_dataset_xy
+from feature_learning_utils import  load_student, student3
+
 
 print(os.getcwd() + '/')
 #%%
@@ -128,21 +128,15 @@ trainX, testX = prep_pixels(trainX, testX)
 
 
 #%%
-############################### Get Trained Teacher ##########################3
-
-path = os.getcwd() + '/'
-
-teacher = keras.models.load_model(parameters['teacher_net'])
-teacher.evaluate(trainX[45000:], trainY[45000:], verbose=2)
+############################### Get Trained Student ##########################3
+student = load_student()
 
 
-fe_model = teacher.layers[0]
-be_model = teacher.layers[1]
 #%%
 
 # The dimensions of our input image
-img_width = 32
-img_height = 32
+img_width = 8
+img_height = 8
 # Our target layer: we will visualize the filters from this layer.
 # See `model.summary()` for list of layer names, if you want to change this.
 
@@ -150,11 +144,11 @@ img_height = 32
 
 # Set up a model that returns the activation values for our target layer
 # Looking on the features of the output, what the student learns to imitate
-feature_extractor = fe_model
+feature_extractor = student
 
 # Set up a model that returns the activation values for our target layer
-layer = fe_model.get_layer(name='max_pool2')
-feature_extractor = keras.Model(inputs=fe_model.inputs, outputs=layer.output)
+# layer = fe_model.get_layer(name='max_pool2')
+# feature_extractor = keras.Model(inputs=fe_model.inputs, outputs=layer.output)
 
 def compute_loss(input_image, filter_index):
     activation = feature_extractor(input_image)
@@ -170,25 +164,32 @@ def gradient_ascent_step(img, filter_index, learning_rate):
         tape.watch(img)
         loss = compute_loss(img, filter_index)
     # Compute gradients.
-    grads = tape.gradient(loss, img)
+    grads = tape.gradient(loss, img[0])
     # Normalize gradients.
     grads = tf.math.l2_normalize(grads)
-    img += learning_rate * grads
-    return loss, img
+    orig_img = img[0] + 0
+    orig_img += learning_rate * grads
+    return loss, (orig_img, img[1])
 
 
 def initialize_image():
     # We start from a gray image with some random noise
-    img = tf.random.uniform((1, img_width, img_height, 3))
+    img = tf.random.uniform((1,10, img_width, img_height, 3))
+    traject = tf.random.uniform((10,2))
+    broadcast_place = np.ones(shape = [10,img_width,img_height,2])
+    for i in range(10):
+        broadcast_place[i,:,:,0] *= traject[i,0]
+        broadcast_place[i,:,:,1] *= traject[i,1]
+    broadcast_place = tf.expand_dims(tf.convert_to_tensor(broadcast_place), axis = 0)
     # ResNet50V2 expects inputs in the range [-1, +1].
     # Here we scale our random inputs to [-0.125, +0.125]
-    return (img - 0.5) * 0.25
+    return ((img - 0.5) * 0.25, broadcast_place)
 
 
 def visualize_filter(filter_index, use_img = False):
     # We run gradient ascent for 20 steps
-    iterations = 50
-    learning_rate = 10.0
+    iterations = 100
+    learning_rate = 20.0
     if use_img:
         img = tf.expand_dims(tf.convert_to_tensor(images[42]), axis = 0)/255
     else:
@@ -224,15 +225,19 @@ def deprocess_image(img):
 from IPython.display import Image, display
 import matplotlib.pyplot as plt 
 # The dimensions of our input image
-img_width = 32
-img_height = 32
-for i in range(3):
+img_width = 8
+img_height = 8
+for i in range(1):
     
     loss, img = visualize_filter(i)
     
-    plt.figure()
-    plt.imshow(img)
-    plt.title(i)
+    fig, ax = plt.subplots(3,3)
+    indx = 0
+    for l in range(3):
+        for k in range(3):
+            ax[l,k].imshow(img[0,indx,:,:,:])
+            indx+=1
+            ax[l,k].title.set_text(indx)
 
 #keras.preprocessing.image.save_img("0.png", img)
 

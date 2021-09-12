@@ -165,6 +165,44 @@ def save_model(net,path,parameters,checkpoint = True):
     #LOADING WITH - load_status = sequential_model.load_weights("ckpt")
     
 
+def load_student(path = '/home/orram/Documents/GitHub/imagewalker/teacher_student/',  run_name = 'noname_j178_t1630240486'):
+
+
+    temp_path = path + 'saved_models/{}_feature/'.format(run_name)
+    home_folder = temp_path + '{}_saved_models/'.format(run_name)
+    
+    child_folder = home_folder + 'end_of_run_model/'
+    
+    
+    #loading weights as numpy array
+    numpy_weights_path = child_folder + '{}_numpy_weights/'.format(run_name)
+    with open(numpy_weights_path + 'numpy_weights_{}'.format(run_name), 'rb') as file_pi:
+        np_weights = pickle.load(file_pi)
+        
+    data = pd.read_pickle(path + 'feature_learning/summary_dataframe_feature_learning_full_train_103.pkl')
+    parameters = data[data['this_run_name'] == run_name].to_dict('records')[0]
+    
+    
+    numpy_student = student3(sample = int(parameters['max_length']), 
+                       res = int(parameters['res']), 
+                        activation = parameters['student_nl'],
+                        dropout = parameters['dropout'], 
+                        rnn_dropout = parameters['rnn_dropout'],
+                        num_feature = int(parameters['num_feature']),
+                       layer_norm = parameters['layer_norm_student'],
+                       conv_rnn_type = parameters['conv_rnn_type'],
+                       block_size = int(parameters['student_block_size']),
+                       add_coordinates = parameters['broadcast'],
+                       time_pool = parameters['time_pool'])
+    layer_index = 0
+    for layer in numpy_student.layers:
+        if layer.name[:-2] == 'convLSTM':
+            layer_name = layer.name
+            saved_weights = [np_weights[layer_index], np_weights[layer_index+ 1], np_weights[layer_index+ 2]]
+            numpy_student.get_layer(layer_name).set_weights(saved_weights)
+            layer_index += 3
+            
+    return numpy_student, parameters
 
 def student3(sample = 10, res = 8, activation = 'tanh', dropout = 0.0, rnn_dropout = 0.0,
              num_feature = 1, layer_norm = False , n_layers=3, conv_rnn_type='lstm',block_size = 1,
