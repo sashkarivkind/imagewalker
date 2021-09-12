@@ -26,6 +26,8 @@ import cv2
 import tensorflow as tf
 from tensorflow.keras.applications.resnet50 import ResNet50
 from matplotlib import pyplot as plt
+import pdb
+
 # import tensorflow_datasets as tfds
 
 print("Tensorflow version " + tf.__version__)
@@ -97,7 +99,7 @@ def bad_res102(img,res):
     dwnsmp=cv2.resize(img,res, interpolation = cv2.INTER_CUBIC)
     return dwnsmp
 
-new_res = int(sys.argv[1])
+new_res = int(sys.argv[1]) if len(sys.argv) > 1 else 32
 print('-----------setting resolution to {} ------'.format( new_res))
 (training_images, training_labels), (test_images, test_labels) = tf.keras.datasets.cifar10.load_data()
 
@@ -213,6 +215,7 @@ model.summary()
 # ## Train the model
 
 # %% [code] {"id":"2K6RNDqtJ_xx"}
+pdb.set_trace()
 EPOCHS = 10
 history = model.fit(train_X, training_labels, epochs=EPOCHS, validation_data=(valid_X, validation_labels),
                     batch_size=64, verbose=2)

@@ -3,7 +3,7 @@ import numpy as np
 import pickle
 import glob
 from scipy import misc
-from mnist import MNIST
+# from mnist import MNIST
 import cv2
 import sys
 import copy

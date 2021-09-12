@@ -12,6 +12,11 @@ from tensorflow.keras.datasets import cifar10
 from tensorflow.keras.preprocessing.image import ImageDataGenerator
 # from tensorflow.keras.utils import np_utils
 from tensorflow.keras.callbacks import ReduceLROnPlateau, CSVLogger, EarlyStopping
+import sys
+
+sys.path.insert(1, '/home/labs/ahissarlab/arivkind/imagewalker')
+sys.path.insert(1, '/home/bnapp/arivkindNet/imagewalker/')
+
 from misc import one_hot
 
 import numpy as np
@@ -25,7 +30,12 @@ lsbjob = os.getenv('LSB_JOBID')
 lsbjob = '' if lsbjob is None else lsbjob
 
 parser = argparse.ArgumentParser()
+parser.add_argument('--network_topology', default='default', type=str, help='default or v2')
+
 parser.add_argument('--resblocks', default=3, type=int, help='resblocks')
+parser.add_argument('--resblocks16', default=3, type=int, help='resblocks')
+parser.add_argument('--resblocks8', default=3, type=int, help='resblocks')
+
 parser.add_argument('--last_layer_size', default=128, type=int, help='last_layer_size')
 parser.add_argument('--dropout1', default=0.2, type=float, help='dropout1')
 parser.add_argument('--dropout2', default=0.0, type=float, help='dropout2')
@@ -33,12 +43,23 @@ parser.add_argument('--dataset_norm', default=128., type=float, help='dropout2')
 
 parser.add_argument('--layer_norm_res', dest='layer_norm_res', action='store_true')
 parser.add_argument('--no-layer_norm_res', dest='layer_norm_res', action='store_false')
+parser.add_argument('--layer_norm_res16', dest='layer_norm_res16', action='store_true')
+parser.add_argument('--no-layer_norm_res16', dest='layer_norm_res16', action='store_false')
+parser.add_argument('--layer_norm_res8', dest='layer_norm_res8', action='store_true')
+parser.add_argument('--no-layer_norm_res8', dest='layer_norm_res8', action='store_false')
 
 parser.add_argument('--layer_norm_2', dest='layer_norm_2', action='store_true')
 parser.add_argument('--no-layer_norm_2', dest='layer_norm_2', action='store_false')
 
 parser.add_argument('--skip_conn', dest='skip_conn', action='store_true')
 parser.add_argument('--no-skip_conn', dest='skip_conn', action='store_false')
+parser.add_argument('--skip_conn16', dest='skip_conn16', action='store_true')
+parser.add_argument('--no-skip_conn16', dest='skip_conn16', action='store_false')
+parser.add_argument('--skip_conn8', dest='skip_conn8', action='store_true')
+parser.add_argument('--no-skip_conn8', dest='skip_conn8', action='store_false')
+
+parser.add_argument('--dense_interface', dest='dense_interface', action='store_true')
+parser.add_argument('--no-dense_interface', dest='dense_interface', action='store_false')
 
 parser.add_argument('--last_maxpool_en', dest='last_maxpool_en', action='store_true')
 parser.add_argument('--no-last_maxpool_en', dest='last_maxpool_en', action='store_false')
@@ -56,7 +77,12 @@ parser.add_argument('--rotation_range', default=0.0, type=float, help='dropout1'
 parser.add_argument('--width_shift_range', default=0.1, type=float, help='dropout2')
 parser.add_argument('--height_shift_range', default=0.1, type=float, help='dropout2')
 
-parser.set_defaults(data_augmentation=True,layer_norm_res=True,layer_norm_2=True,skip_conn=True,last_maxpool_en=True)
+parser.set_defaults(data_augmentation=True,
+                    layer_norm_res=True,layer_norm_res16=True,layer_norm_res8=True,
+                    layer_norm_2=True,
+                    skip_conn=True,skip_conn8=True,skip_conn16=True,
+                    dense_interface=False,
+                    last_maxpool_en=True)
 
 config = parser.parse_args()
 config = vars(config)
@@ -102,15 +128,33 @@ X_train /= config['dataset_norm']
 X_val /= config['dataset_norm']
 
 
-model =orram_style_nets.parametric_net_befe(dropout1=config['dropout1'],
-                                        dropout2=config['dropout2'],
-                                        resblocks=config['resblocks'],
-                                        layer_norm_res=config['layer_norm_res'],
-                                        layer_norm_2=config['layer_norm_2'],
-                                        skip_conn=config['skip_conn'],
-                                        nl=config['nl'],
-                                        last_layer_size=config['last_layer_size'],
-                                       last_maxpool_en = config['last_maxpool_en'])
+if config['network_topology'] == 'v2':
+    model =orram_style_nets.parametric_net_befe_v2(dropout1=config['dropout1'],
+                                                   dropout2=config['dropout2'],
+                                                   resblocks16=config['resblocks16'],
+                                                   resblocks8=config['resblocks8'],
+                                                   layer_norm_res16=config['layer_norm_res16'],
+                                                   layer_norm_res8=config['layer_norm_res8'],
+                                                   layer_norm_2=config['layer_norm_2'],
+                                                   skip_conn16=config['skip_conn16'],
+                                                   skip_conn8=config['skip_conn8'],
+                                                   dense_interface=config['dense_interface'],
+                                                   last_maxpool_en=config['last_maxpool_en'],
+                                                   nl=config['nl'],
+                                                   last_layer_size=config['last_layer_size'])
+elif config['network_topology'] == 'default':
+    model =orram_style_nets.parametric_net_befe(dropout1=config['dropout1'],
+                                            dropout2=config['dropout2'],
+                                            resblocks=config['resblocks'],
+                                            layer_norm_res=config['layer_norm_res'],
+                                            layer_norm_2=config['layer_norm_2'],
+                                            skip_conn=config['skip_conn'],
+                                            dense_interface=config['dense_interface'],
+                                            nl=config['nl'],
+                                            last_layer_size=config['last_layer_size'],
+                                            last_maxpool_en = config['last_maxpool_en'])
+else:
+    error
 
 model.compile(loss='sparse_categorical_crossentropy', #todo
               optimizer='adam',

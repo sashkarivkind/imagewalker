@@ -347,7 +347,7 @@ student = student3(sample = sample,
                    conv_rnn_type = parameters['conv_rnn_type'],
                    time_pool = parameters['time_pool'],
                    add_coordinates = parameters['broadcast'],
-                   block_size = parameters['']
+                   block_size = parameters['student_block_size']
                    )
 
 student.evaluate(test_dataset_x[0],

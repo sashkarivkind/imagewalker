@@ -45,7 +45,10 @@ parser.add_argument('--no-testmode', dest='testmode', action='store_false')
 ### student parameters
 parser.add_argument('--epochs', default=1, type=int, help='num training epochs')
 parser.add_argument('--int_epochs', default=1, type=int, help='num internal training epochs')
+parser.add_argument('--decoder_epochs', default=20, type=int, help='num internal training epochs')
 parser.add_argument('--num_feature', default=64, type=int, help='legacy to be discarded')
+parser.add_argument('--rnn_layer1', default=32, type=int, help='legacy to be discarded')
+parser.add_argument('--rnn_layer2', default=64, type=int, help='legacy to be discarded')
 parser.add_argument('--time_pool', default=0, help='time dimention pooling to use - max_pool, average_pool, 0')
 
 parser.add_argument('--student_block_size', default=1, type=int, help='number of repetition of each convlstm block')
@@ -64,7 +67,7 @@ parser.add_argument('--trajectory_index', default=0, type=int, help='trajectory 
 parser.add_argument('--sample', default=5, type=int, help='sample')
 parser.add_argument('--res', default=8, type=int, help='resolution')
 parser.add_argument('--trajectories_num', default=10, type=int, help='number of trajectories to use')
-parser.add_argument('--broadcast', default=0, type=int, help='integrate the coordinates by broadcasting them as extra dimentions')
+parser.add_argument('--broadcast', default=0, type=int, help='1-integrate the coordinates by broadcasting them as extra dimentions, 2- add coordinates as an extra input')
 parser.add_argument('--style', default='brownain', type=str, help='choose syclops style of motion')
 parser.add_argument('--noise', default=0.15, type=float, help='added noise to the const_p_noise style')
 parser.add_argument('--max_length', default=5, type=int, help='choose syclops max trajectory length')
@@ -83,6 +86,8 @@ parser.add_argument('--dataset_norm', default=128.0, type=float, help='dropout2'
 parser.add_argument('--dataset_center', dest='dataset_center', action='store_true')
 parser.add_argument('--no-dataset_center', dest='dataset_center', action='store_false')
 
+parser.add_argument('--dense_interface', dest='dense_interface', action='store_true')
+parser.add_argument('--no-dense_interface', dest='dense_interface', action='store_false')
 
 parser.add_argument('--layer_norm_res', dest='layer_norm_res', action='store_true')
 parser.add_argument('--no-layer_norm_res', dest='layer_norm_res', action='store_false')
@@ -109,7 +114,7 @@ parser.add_argument('--rotation_range', default=0.0, type=float, help='dropout1'
 parser.add_argument('--width_shift_range', default=0.1, type=float, help='dropout2')
 parser.add_argument('--height_shift_range', default=0.1, type=float, help='dropout2')
 
-parser.set_defaults(data_augmentation=True,layer_norm_res=True,layer_norm_student=True,layer_norm_2=True,skip_conn=True,last_maxpool_en=True, testmode=False,dataset_center=True)
+parser.set_defaults(data_augmentation=True,layer_norm_res=True,layer_norm_student=True,layer_norm_2=True,skip_conn=True,last_maxpool_en=True, testmode=False,dataset_center=True, dense_interface=False)
 
 config = parser.parse_args()
 config = vars(config)
@@ -270,11 +275,14 @@ student = student3(sample = parameters['max_length'],
                     dropout = dropout, 
                     rnn_dropout = rnn_dropout,
                     num_feature = num_feature,
+                   rnn_layer1 = parameters['rnn_layer1'],
+                   rnn_layer2 = parameters['rnn_layer2'],
                    layer_norm = parameters['layer_norm_student'],
                    conv_rnn_type = parameters['conv_rnn_type'],
                    block_size = parameters['student_block_size'],
                    add_coordinates = parameters['broadcast'],
-                   time_pool = parameters['time_pool'])
+                   time_pool = parameters['time_pool'],
+                   dense_interface=parameters['dense_interface'])
 
 train_accur = []
 test_accur = []
@@ -385,13 +393,44 @@ pre_training_accur = decoder.evaluate(student_test_data,trainY[45000:], verbose=
 parameters['pre_training_decoder_accur'] = pre_training_accur[1]
 ############################ Re-train the half_net with the student training features ###########################
 print('\nTraining the base newtwork with the student features')
-decoder_history = decoder.fit(student_train_data,
-                       trainY[:45000],
-                       epochs = 10  if not TESTMODE else 1,
-                       batch_size = 64,
-                       validation_data = (student_test_data, trainY[45000:]),
-                       verbose = 2,
-                       callbacks=[lr_reducer,early_stopper],)
+
+for epoch in range(parameters['decoder_epochs']):
+    print('\nRe extracting student learnt features for epoch{}'.format(epoch))
+    train_dataset, test_dataset, seed_list = create_cifar_dataset(images, labels,res = res,
+                                    sample = sample, return_datasets=True,
+                                    mixed_state = True,
+                                    add_seed = trajectories_num,
+                                    trajectory_list = 0,
+                                    broadcast=parameters['broadcast'],
+                                    style = parameters['style'],
+                                    max_length=parameters['max_length'],
+                                    noise = parameters['noise'],
+                                    )
+    train_dataset_x, train_dataset_y = split_dataset_xy(train_dataset, sample = sample)
+    test_dataset_x, test_dataset_y = split_dataset_xy(test_dataset,sample = sample)
+    for batch in range(len(train_dataset_x[0])//batch_size + 1):
+        count+=1
+        train_temp = student((train_dataset_x[0][start:end],train_dataset_x[1][start:end])).numpy()
+        student_train_data[start:end,:,:,:] = train_temp[:,:,:,:]
+        start += batch_size
+        end += batch_size
+    start = 0
+    end = batch_size
+    count = 0
+    # for batch in range(len(test_dataset_x[0])//batch_size + 1):
+    #     count+=1
+    #     test_temp = student((test_dataset_x[0][start:end],test_dataset_x[1][start:end])).numpy()
+    #     student_test_data[start:end,:,:,:] = test_temp[:,:,:,:]
+    #     start += batch_size
+    #     end += batch_size
+
+    decoder_history = decoder.fit(student_train_data,
+                           trainY[:45000],
+                           epochs = 1  if not TESTMODE else 1,
+                           batch_size = 64,
+                           validation_data = (student_test_data, trainY[45000:]),
+                           verbose = 2,
+                           callbacks=[lr_reducer,early_stopper],)
 
 home_folder = save_model_path + '{}_saved_models/'.format(this_run_name)
 decoder.save(home_folder +'decoder_trained_model')
