@@ -471,7 +471,7 @@ def create_cifar_dataset(images, labels, res, sample = 5, mixed_state = True, ad
     #pre pad all images to max_length
     for idx, image in enumerate(ts_images):
         image_base = np.zeros(shape = [max_length, res, res, 3])
-        if broadcast:
+        if broadcast==1:
             seq_base = np.zeros(shape = [max_length, res, res, 2])
         else:
             seq_base = np.zeros([max_length, 2])
