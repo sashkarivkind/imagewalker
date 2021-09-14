@@ -28,10 +28,28 @@ import pandas as pd
 import time
 import pickle
 import argparse
-from feature_learning_utils import  load_student, student3
+from feature_learning_utils import  student3,  write_to_file, traject_learning_dataset_update,  net_weights_reinitializer
+from keras_utils import create_cifar_dataset, split_dataset_xy
 
-from keras_utils import create_trajectory
 print(os.getcwd() + '/')
+#%%
+path = '/home/orram/Documents/GitHub/imagewalker/teacher_student/'
+run_name = 'noname_j178_t1630240486'
+
+
+temp_path = path + 'saved_models/{}_feature/'.format(run_name)
+home_folder = temp_path + '{}_saved_models/'.format(run_name)
+
+child_folder = home_folder + 'end_of_run_model/'
+
+
+#loading weights as numpy array
+numpy_weights_path = child_folder + '{}_numpy_weights/'.format(run_name)
+with open(numpy_weights_path + 'numpy_weights_{}'.format(run_name), 'rb') as file_pi:
+    np_weights = pickle.load(file_pi)
+    
+data = pd.read_pickle(path + 'feature_learning/summary_dataframe_feature_learning_full_train_103.pkl')
+    
 #%%
 
 # load dataset
@@ -126,16 +144,23 @@ def prep_pixels(train, test):
 # prepare pixel data
 trainX, testX = prep_pixels(trainX, testX)
 
+
 #%%
-############################### Get Trained Student ##########################3
-student, parametrs = load_student(run_name = 'noname_j253106_t1631441888')
+############################### Get Trained Teacher ##########################3
+
+path = os.getcwd() + '/'
+
+teacher = keras.models.load_model(parameters['teacher_net'])
+#teacher.evaluate(trainX[45000:], trainY[45000:], verbose=2)
 
 
+fe_model = teacher.layers[0]
+be_model = teacher.layers[1]
 #%%
 
 # The dimensions of our input image
-img_width = 8
-img_height = 8
+img_width = 32
+img_height = 32
 # Our target layer: we will visualize the filters from this layer.
 # See `model.summary()` for list of layer names, if you want to change this.
 
@@ -143,73 +168,95 @@ img_height = 8
 
 # Set up a model that returns the activation values for our target layer
 # Looking on the features of the output, what the student learns to imitate
-feature_extractor = student
+feature_extractor = fe_model
 
 # Set up a model that returns the activation values for our target layer
-layer = student.get_layer(name='convLSTM30')
-feature_extractor = keras.Model(inputs=student.inputs, outputs=layer.output)
+layer = fe_model.get_layer(name='max_pool2')
+feature_extractor = keras.Model(inputs=fe_model.inputs, outputs=layer.output)
 
+def define_generator(latent_dim = 100):
+    input = keras.layers.Input(shape=[latent_dim])
+    initial_shape = [4,4,128]
+    
+    final_shape = [1,32,32,3]
+    x = keras.layers.Dense(initial_shape[0]*initial_shape[1]*initial_shape[2],
+                           )(input)
+    x = keras.layers.LeakyReLU(alpha=0.2)(x)
+    x = keras.layers.Reshape(initial_shape)(x)
+    print(x.shape)
+    #8x8
+    x = keras.layers.Conv2DTranspose(
+        128, (2,2), strides=(2,2),padding = 'valid')(x)
+    x = keras.layers.LeakyReLU(alpha=0.2)(x)
+    print(x.shape)
+    #16*16
+    x = keras.layers.Conv2DTranspose(
+        128, (2,2), strides=(2,2), padding = 'valid')(x)
+    x = keras.layers.LeakyReLU(alpha=0.2)(x)
+    print(x.shape)
+    #32*32
+    x = keras.layers.Conv2DTranspose(
+    128, (2,2), strides=(2,2), padding = 'valid')(x)
+    x = keras.layers.LeakyReLU(alpha=0.2)(x)
+    print(x.shape)
+    #output layer
+    x = keras.layers.Conv2DTranspose(
+        3, (3,3), padding = 'same', activation = 'tanh')(x)
+    print(x.shape)
+    x -= keras.backend.mean(x)
+    x /= keras.backend.std(x) + 1e-5
+    x *= 0.15
+
+    # Center crop
+    #img = img[25:-25, 25:-25, :]
+
+    # Clip to [0, 1]
+    x += 0.5
+    x = keras.backend.clip(x, 0, 1)
+    model = keras.models.Model(inputs=[input],outputs=x, name = 'student_3')
+
+
+    return model
+
+generator = define_generator()
+optimizer = tf.keras.optimizers.SGD(lr=1e-2)
+#%%
 def compute_loss(input_image, filter_index):
-    
     activation = feature_extractor(input_image)
-    
     # We avoid border artifacts by only involving non-border pixels in the loss.
     filter_activation = activation[:, 1:-1, 1:-1, filter_index]
-    
-    return tf.reduce_mean(filter_activation)
+    #plt.imshow(activation[:, 1:-1, 1:-1, filter_index][0])
+    #print(activation[:, 1:-1, 1:-1, filter_index][0])
+    return -tf.reduce_mean(filter_activation)
 
 
 
-def gradient_ascent_step(img, filter_index, learning_rate):
+def gradient_ascent_step(latent_starter, filter_index, learning_rate):
     with tf.GradientTape() as tape:
-        traject = np.array(create_trajectory((32,32),sample = 10, style = 'spiral'))#tf.random.uniform((10,2))
-        traject = tf.expand_dims(tf.convert_to_tensor(traject), axis = 0)
-        tape.watch(img)
-        loss = compute_loss((img,traject), filter_index)
+        img = generator(latent_starter)
+        #tape.watch(generator)
+        loss = compute_loss(img, filter_index)
     # Compute gradients.
-    grads = tape.gradient(loss, img)
+    grads = tape.gradient(loss, generator.trainable_weights)
+    #print(grads)
     # Normalize gradients.
-    grads = tf.math.l2_normalize(grads)
-    orig_img = img + 0
-    orig_img += learning_rate * grads
-    return loss, orig_img
+    optimizer.apply_gradients(zip(grads, generator.trainable_weights))
 
-
-def initialize_image(broadcast = False):
-    # We start from a gray image with some random noise
-    img = tf.random.uniform((1,10, img_width, img_height, 3))
-    traject = np.array(create_trajectory((32,32),sample = 10, style = 'spiral'))#tf.random.uniform((10,2))
-    if broadcast:
-        broadcast_place = np.ones(shape = [10,img_width,img_height,2])
-        for i in range(10):
-            broadcast_place[i,:,:,0] *= traject[i,0]
-            broadcast_place[i,:,:,1] *= traject[i,1]
-    else:
-        broadcast_place = traject
-        
-    broadcast_place = tf.expand_dims(tf.convert_to_tensor(broadcast_place), axis = 0)
-    # ResNet50V2 expects inputs in the range [-1, +1].
-    # Here we scale our random inputs to [-0.125, +0.125]
-    return (img - 0.5) * 0.25# broadcast_place)
+    return loss, img
 
 
 def visualize_filter(filter_index, use_img = False):
     # We run gradient ascent for 20 steps
-    iterations = 100
-    learning_rate = 0.2
-    if use_img:
-        img = tf.expand_dims(tf.convert_to_tensor(images[42]), axis = 0)/255
-    else:
-        img = initialize_image()
+    iterations = 150
+    learning_rate = 10.0
     loss_list = []
+    latent_starter = tf.random.uniform([1,100])
     for iteration in range(iterations):
-        temp_img = keras.layers.LayerNormalization(axis = [1,2])(img)
-        img = temp_img
-        loss, img = gradient_ascent_step(img, filter_index, learning_rate)
+        loss, img = gradient_ascent_step(latent_starter, filter_index, learning_rate)
         loss_list.append(loss)
 
     # Decode the resulting input image
-    img = deprocess_image(img.numpy())
+    img = deprocess_image(img[0].numpy())
     return loss_list, img
 
 
@@ -226,28 +273,25 @@ def deprocess_image(img):
     img += 0.5
     img = np.clip(img, 0, 1)
 
-    # Convert to RGB array
-    img *= 255
-    img = np.clip(img, 0, 255).astype("uint8")
+    # # Convert to RGB array
+    # img *= 255
+    # img = np.clip(img, 0, 255).astype("uint8")
     return img
 #%%
 from IPython.display import Image, display
 import matplotlib.pyplot as plt 
 # The dimensions of our input image
-img_width = 8
-img_height = 8
+img_width = 32
+img_height = 32
 loss_list = []
 for i in range(1):
-    
-    loss, img = visualize_filter(20)
-    loss_list.append(loss)
-    fig, ax = plt.subplots(3,3)
-    indx = 0
-    for l in range(3):
-        for k in range(3):
-            ax[l,k].imshow(img[0,indx,:,:,:])
-            indx+=1
-            ax[l,k].title.set_text(indx)
+    generator = define_generator()
+    optimizer = tf.keras.optimizers.Adam(lr=1e-3)
+    loss, img = visualize_filter(32)
+    loss_list.append(np.array(loss))
+    plt.figure()
+    plt.imshow(img)
+    plt.title(i)
 
 #keras.preprocessing.image.save_img("0.png", img)
 
@@ -285,6 +329,3 @@ keras.preprocessing.image.save_img("stiched_filters.png", stitched_filters)
 from IPython.display import Image, display
 
 display(Image("stiched_filters.png"))
-
-#%%
-
