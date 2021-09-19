@@ -34,9 +34,9 @@ from keras_utils import create_trajectory
 print(os.getcwd() + '/')
 #%%
 
-# load dataset
-(trainX, trainY), (testX, testY) = cifar10.load_data()
-images, labels = trainX, trainY
+# # load dataset
+# (trainX, trainY), (testX, testY) = cifar10.load_data()
+# images, labels = trainX, trainY
 
 
 
@@ -123,8 +123,8 @@ def prep_pixels(train, test):
     # return normalized images
     return train_norm, test_norm
 
-# prepare pixel data
-trainX, testX = prep_pixels(trainX, testX)
+# # prepare pixel data
+# trainX, testX = prep_pixels(trainX, testX)
 
 
 #%%
@@ -194,13 +194,107 @@ def define_generator(latent_dim = 100):
 
     return model
 
-generator = define_generator()
+def define_generator_spatial(latent_dim = 100, length = 10):
+    input = keras.layers.Input(shape=[latent_dim])
+    initial_shape = [1,1,128]
+    
+    final_shape = [1,8,8,3]
+    x = keras.layers.Dense(initial_shape[0]*initial_shape[1]*initial_shape[2],
+                           )(input)
+    x = keras.layers.LeakyReLU(alpha=0.2)(x)
+    x = keras.layers.Reshape(initial_shape)(x)
+    print(x.shape)
+    #8x8
+    x = keras.layers.Conv2DTranspose(
+        128, (2,2), strides=(2,2),padding = 'valid')(x)
+    x = keras.layers.LeakyReLU(alpha=0.2)(x)
+    print(x.shape)
+    #16*16
+    x = keras.layers.Conv2DTranspose(
+        128, (2,2), strides=(2,2), padding = 'valid')(x)
+    x = keras.layers.LeakyReLU(alpha=0.2)(x)
+    print(x.shape)
+    #32*32
+    x = keras.layers.Conv2DTranspose(
+    128, (2,2), strides=(2,2), padding = 'valid')(x)
+    x = keras.layers.LeakyReLU(alpha=0.2)(x)
+    print(x.shape)
+    #output layer
+    x = keras.layers.Conv2DTranspose(
+        3, (3,3), padding = 'same', activation = 'tanh')(x)
+    print(x.shape)
+    x -= keras.backend.mean(x)
+    x /= keras.backend.std(x) + 1e-5
+    x *= 0.15
+
+    x += 0.5
+    x = keras.backend.clip(x, 0, 1)
+    x = tf.expand_dims(x, axis = 1)
+    old_x = x + 0
+    for t in range(length-1):
+        x = keras.layers.concatenate([x,old_x], axis = 1)
+    print(x.shape)
+    model = keras.models.Model(inputs=[input],outputs=x, name = 'student_3')
+
+
+    return model
+
+def define_generator_temporal(latent_dim = 100):
+    input = keras.layers.Input(shape=[latent_dim])
+    initial_shape = [1,128]
+    
+    final_shape = [10,8,8,3]
+    x = keras.layers.Dense(initial_shape[0]*initial_shape[1],
+                           )(input)
+    x = keras.layers.LeakyReLU(alpha=0.2)(x)
+    x = keras.layers.Reshape(initial_shape)(x)
+    print(x.shape)
+    #8x8
+    x = keras.layers.Conv1DTranspose(
+        128, (2), strides=(2),padding = 'valid')(x)
+    x = keras.layers.LeakyReLU(alpha=0.2)(x)
+    print(x.shape)
+    #16*16
+    x = keras.layers.Conv1DTranspose(
+        128, (3), strides=(2), padding = 'valid')(x)
+    x = keras.layers.LeakyReLU(alpha=0.2)(x)
+    print(x.shape)
+    #32*32
+    x = keras.layers.Conv1DTranspose(
+    128, (2), strides=(2), padding = 'valid')(x)
+    x = keras.layers.LeakyReLU(alpha=0.2)(x)
+    print(x.shape)
+    #output layer
+    x = keras.layers.Conv1DTranspose(
+        3, (3), padding = 'same', activation = 'tanh')(x)
+    print(x.shape)
+    x -= keras.backend.mean(x)
+    x /= keras.backend.std(x) + 1e-5
+    x *= 0.15
+
+    x += 0.5
+    x = keras.backend.clip(x, 0, 1)
+    x = tf.expand_dims(x, axis = 2)
+    # x = tf.expand_dims(x, axis = 2)
+    print(x.shape)
+    old_x = x + 0
+    
+    for w in range(8*8-1):
+        x = keras.layers.concatenate([x,old_x], axis = 2)
+    print(x.shape)
+    x = keras.layers.Reshape(final_shape)(x)
+    print(x.shape)
+    model = keras.models.Model(inputs=[input],outputs=x, name = 'student_3')
+
+
+    return model
+generator = define_generator_temporal()
 optimizer = tf.keras.optimizers.Adam(lr=1e-2)
 #%%
 def compute_loss(input_image, filter_index):
     traject = np.array(create_trajectory((32,32),sample = 10, style = 'spiral'))#tf.random.uniform((10,2))
     traject = np.expand_dims(traject, 0)
-    input_image += tf.random.normal(input_image.shape, stddev = 0.15)
+    input_image += tf.random.normal(input_image.shape, stddev = 0.0005)
     activation = feature_extractor((input_image,traject))
     # We avoid border artifacts by only involving non-border pixels in the loss.
     filter_activation = activation[:, 1:-1, 1:-1, filter_index]
@@ -216,7 +310,7 @@ def gradient_ascent_step(latent_starter, filter_index):
         #tape.watch(generator)
         loss = compute_loss(img, filter_index)
  
-    # Compute gradients.
+    # Compute gradients.define_generator
     grads = tape.gradient(loss, generator.trainable_weights)
     #print(grads)
     # Normalize gradients.
@@ -227,7 +321,7 @@ def gradient_ascent_step(latent_starter, filter_index):
 
 def visualize_filter(filter_index, use_img = False):
     # We run gradient ascent for 20 steps
-    iterations = 200
+    iterations = 100
     loss_list = []
     latent_starter = tf.random.uniform([1,100])
     for iteration in range(iterations):
@@ -262,10 +356,53 @@ def deprocess_image(img):
 img_width = 8
 img_height = 8
 loss_list = []
+loss_list_spatial = []
+loss_list_temporal = []
 shuffle = []
+spatial_shuffle = []
+temporal_shuffle = []
 img_list = {}
-for i in range(3):
-    feature = 8
+img_list_spatial = {}
+feature_list = []
+img_list_temporal = {}
+runs = 5
+temp_image = np.ones(shape = [10,runs,3])
+for i in range(runs):
+
+    feature = 0
+    feature_list.append(feature)
+    #regular
+    generator = define_generator_temporal()
+    optimizer = tf.keras.optimizers.Adam(lr=1e-3)
+    loss, img = visualize_filter(feature)
+    for j in range(10):
+        color = img[j,0,0,:]
+        temp_image[j,i,:] *= color
+        
+img_list[feature] = img
+loss_list.append(-np.array(loss))
+plt.figure()
+plt.imshow(temp_image)
+
+#%%
+
+# The dimensions of our input image
+img_width = 8
+img_height = 8
+loss_list = []
+loss_list_spatial = []
+loss_list_temporal = []
+shuffle = []
+spatial_shuffle = []
+temporal_shuffle = []
+img_list = {}
+img_list_spatial = {}
+feature_list = []
+img_list_temporal = {}
+for i in range(10):
+    feature = i*3
+    feature_list.append(feature)
+    #regular
     generator = define_generator()
     optimizer = tf.keras.optimizers.Adam(lr=1e-3)
     loss, img = visualize_filter(feature)
@@ -296,13 +433,87 @@ for i in range(3):
     img_ns = np.expand_dims(img_ns, 0)
     ns_loss = compute_loss(img_ns,feature)
     shuffle.append([-float(loss[-1]),-float(sh_loss),-float(ns_loss),])
+    ##########################################################################
+    #spatial
+    generator = define_generator_spatial()
+    optimizer = tf.keras.optimizers.Adam(lr=1e-3)
+    loss, img = visualize_filter(feature)
+    img_list_spatial[feature] = img
+    loss_list_spatial.append(-np.array(loss))
+    fig, ax = plt.subplots(3,3)
+    fig.suptitle(feature)
+    indx = 0
+    for l in range(3):
+        for k in range(3):
+            ax[l,k].imshow(img[indx,:,:,:])
+            indx+=1
+            ax[l,k].title.set_text(indx)
+    #now, shuffle and test loss
+    img_sh = tf.random.shuffle(img)
+    # fig, ax = plt.subplots(3,3)
+    # fig.suptitle('shuffle {}'.format(feature))
+    # indx = 0
+    # for l in range(3):
+    #     for k in range(3):
+    #         ax[l,k].imshow(img_sh[indx,:,:,:])
+    #         indx+=1
+    #         ax[l,k].title.set_text(indx)
+    img_sh = np.expand_dims(img_sh, 0)
+    sh_loss = compute_loss(img_sh,feature)
+    #Add noise 
+    img_ns = img + tf.random.normal(img.shape,stddev = np.std(img))
+    img_ns = np.expand_dims(img_ns, 0)
+    ns_loss = compute_loss(img_ns,feature)
+    spatial_shuffle.append([-float(loss[-1]),-float(sh_loss),-float(ns_loss),])
+    ##########################################################################
+    #temporal
+    generator = define_generator_temporal()
+    optimizer = tf.keras.optimizers.Adam(lr=1e-3)
+    loss, img = visualize_filter(feature)
+    img_list_temporal[feature] = img
+    loss_list_temporal.append(-np.array(loss))
+    fig, ax = plt.subplots(3,3)
+    fig.suptitle(feature)
+    indx = 0
+    for l in range(3):
+        for k in range(3):
+            ax[l,k].imshow(img[indx,:,:,:])
+            indx+=1
+            ax[l,k].title.set_text(indx)
+    #now, shuffle and test loss
+    img_sh = tf.random.shuffle(img)
+    # fig, ax = plt.subplots(3,3)
+    # fig.suptitle('shuffle {}'.format(feature))
+    # indx = 0
+    # for l in range(3):
+    #     for k in range(3):
+    #         ax[l,k].imshow(img_sh[indx,:,:,:])
+    #         indx+=1
+    #         ax[l,k].title.set_text(indx)
+    img_sh = np.expand_dims(img_sh, 0)
+    sh_loss = compute_loss(img_sh,feature)
+    #Add noise 
+    img_ns = img + tf.random.normal(img.shape,stddev = np.std(img))
+    img_ns = np.expand_dims(img_ns, 0)
+    ns_loss = compute_loss(img_ns,feature)
+    temporal_shuffle.append([-float(loss[-1]),-float(sh_loss),-float(ns_loss),])
 
-    
-
+#%%
 plt.figure()
 for idx, l in enumerate(loss_list):
-    plt.plot(l, label = idx)
+    plt.plot(l, label = feature_list[idx])
 plt.legend()
+plt.title('regular')
+plt.figure()
+for idx, l in enumerate(loss_list_spatial):
+    plt.plot(l, label = feature_list[idx])
+plt.legend()
+plt.title('spatial')
+plt.figure()
+for idx, l in enumerate(loss_list_temporal):
+    plt.plot(l, label = feature_list[idx])
+plt.legend()
+plt.title('temporal')
 
 #keras.preprocessing.image.save_img("0.png", img)
 

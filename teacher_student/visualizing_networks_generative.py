@@ -287,11 +287,11 @@ loss_list = []
 for i in range(1):
     generator = define_generator()
     optimizer = tf.keras.optimizers.Adam(lr=1e-3)
-    loss, img = visualize_filter(32)
+    loss, img = visualize_filter(13)
     loss_list.append(np.array(loss))
     plt.figure()
     plt.imshow(img)
-    plt.title(i)
+    plt.title(13)
 
 #keras.preprocessing.image.save_img("0.png", img)
 
