@@ -204,15 +204,21 @@ def load_student(path = '/home/orram/Documents/GitHub/imagewalker/teacher_studen
             
     return numpy_student, parameters
 
-def student3(sample = 10, res = 8, activation = 'tanh', dropout = None, rnn_dropout = None,
+def student3(sample = 10, res = 8, activation = 'tanh', dropout = 0.0, rnn_dropout = 0.0,
              num_feature = 1, layer_norm = False , n_layers=3, conv_rnn_type='lstm',block_size = 1,
-             add_coordinates = False, time_pool = False):
+             add_coordinates = False, time_pool = False, coordinate_mode=1, attention_net_size=64, attention_net_depth=1,
+             rnn_layer1=32,
+             rnn_layer2=64,
+             dense_interface=False
+             ):
     #TO DO add option for different block sizes in every convcnn
-    #TO DO add skip connections in the block 
+    #TO DO add skip connections in the block
+    #coordinate_mode 1 - boardcast,
+    #coordinate_mode 2 - add via attention block
     if time_pool == '0':
-        time_pool = 0 
+        time_pool = 0
     inputA = keras.layers.Input(shape=(sample, res,res,3))
-    if add_coordinates:
+    if add_coordinates and coordinate_mode==1:
         inputB = keras.layers.Input(shape=(sample,res,res,2))
     else:
         inputB = keras.layers.Input(shape=(sample,2))
@@ -225,18 +231,28 @@ def student3(sample = 10, res = 8, activation = 'tanh', dropout = None, rnn_drop
 
     #Broadcast the coordinates to a [res,res,2] matrix and concat to x
     if add_coordinates:
-        x = keras.layers.Concatenate()([inputA,inputB])
-    else: 
+        if coordinate_mode==1:
+            x = keras.layers.Concatenate()([inputA,inputB])
+        elif coordinate_mode==2:
+            x = inputA
+            a = keras.layers.GRU(attention_net_size,input_shape=(sample, None),return_sequences=True)(inputB)
+            for ii in range(attention_net_depth-1):
+                a = keras.layers.GRU(attention_net_size, input_shape=(sample, None), return_sequences=True)(a)
+    else:
         x = inputA
     print(x.shape)
     for ind in range(block_size):
-        x = Our_RNN_cell(32,(3,3), padding = 'same', return_sequences=True,
-                                dropout = dropout,recurrent_dropout=rnn_dropout, 
+        x = Our_RNN_cell(rnn_layer1,(3,3), padding = 'same', return_sequences=True,
+                                dropout = dropout,recurrent_dropout=rnn_dropout,
                             name = 'convLSTM1{}'.format(ind))(x)
     for ind in range(block_size):
-        x = Our_RNN_cell(64,(3,3), padding = 'same', return_sequences=True,
+        x = Our_RNN_cell(rnn_layer2,(3,3), padding = 'same', return_sequences=True,
                             name = 'convLSTM2{}'.format(ind),
                             dropout = dropout,recurrent_dropout=rnn_dropout,)(x)
+        if add_coordinates and coordinate_mode==2:
+            a_ = keras.layers.TimeDistributed(keras.layers.Dense(64,activation="tanh"))(a)
+            a_ = keras.layers.Reshape((sample, 1, 1, -1))(a_)
+            x = x * a_
     for ind in range(block_size):
         if ind == block_size - 1:
             if time_pool:
@@ -248,6 +264,13 @@ def student3(sample = 10, res = 8, activation = 'tanh', dropout = None, rnn_drop
         x = Our_RNN_cell(num_feature,(3,3), padding = 'same', return_sequences=return_seq,
                             name = 'convLSTM3{}'.format(ind), activation=activation,
                             dropout = dropout,recurrent_dropout=rnn_dropout,)(x)
+        if dense_interface:
+            if return_seq:
+                x = keras.layers.TimeDistributed(keras.layers.Conv2D(64, (3, 3), padding='same',
+                                        name='anti_sparse'))(x)
+            else:
+                x = keras.layers.Conv2D(64, (3, 3), padding='same',
+                                        name='anti_sparse')(x)
     print(return_seq)
     if time_pool:
         print(time_pool)

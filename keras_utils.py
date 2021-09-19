@@ -12,8 +12,8 @@ import pandas as pd
 import random
 import os 
 
-import importlib
-importlib.reload(misc)
+# import importlib
+# importlib.reload(misc)
 
 
 import matplotlib.pyplot as plt
@@ -352,7 +352,7 @@ def print_traject(images, labels, res, sample = 5, mixed_state = True, add_traje
         
 def create_cifar_dataset(images, labels, res, sample = 5, mixed_state = True, add_traject = True,
                    trajectory_list=0,return_datasets=False, add_seed = True, show_fig = False,
-                   bad_res_func = bad_res102, up_sample = False, broadcast = False, 
+                   bad_res_func = bad_res102, up_sample = False, broadcast = 0,
                    style = 'brownian', noise = 0.15, max_length = 20):
     '''
     Creates a torch dataloader object of syclop outputs 
@@ -435,7 +435,7 @@ def create_cifar_dataset(images, labels, res, sample = 5, mixed_state = True, ad
         imim=[]
         dimim=[]
         agent.set_manual_trajectory(manual_q_sequence=q_sequence)
-        #Run Syclop for 20 time stepsבצדק זה היה ממש לא מתחשב!!
+        #Run Syclop for 20 time steps
 
         for t in range(len(q_sequence)):
             agent.manual_act()
@@ -458,7 +458,7 @@ def create_cifar_dataset(images, labels, res, sample = 5, mixed_state = True, ad
         #Add current proccessed image to lists
         ts_images.append(imim)
         dvs_images.append(dimim)
-        if broadcast:
+        if broadcast==1:
             broadcast_place = np.ones(shape = [sample,res,res,2])
             for i in range(sample):
                 broadcast_place[i,:,:,0] *= q_sequence[i,0]
@@ -471,7 +471,7 @@ def create_cifar_dataset(images, labels, res, sample = 5, mixed_state = True, ad
     #pre pad all images to max_length
     for idx, image in enumerate(ts_images):
         image_base = np.zeros(shape = [max_length, res, res, 3])
-        if broadcast:
+        if broadcast==1:
             seq_base = np.zeros(shape = [max_length, res, res, 2])
         else:
             seq_base = np.zeros([max_length, 2])
@@ -546,18 +546,30 @@ def create_cifar_dataset(images, labels, res, sample = 5, mixed_state = True, ad
         else:
             return train_dataset, test_dataset
 
-def mnist_split_dataset_xy(dataset):
-    n_timesteps = 5
+def mnist_split_dataset_xy(dataset,n_timesteps=5):
     dataset_x1 = [uu[0] for uu in dataset]
     dataset_x2 = [uu[1] for uu in dataset]
     dataset_y = [uu[-1] for uu in dataset]
     return (np.array(dataset_x1)[...,np.newaxis],np.array(dataset_x2)[:,:n_timesteps,:]),np.array(dataset_y)
 
-def split_dataset_xy(dataset,sample):
+def split_dataset_xy(dataset,sample,one_random_sample=False, return_x1_only=False):
     dataset_x1 = [uu[0] for uu in dataset]
     dataset_x2 = [uu[1] for uu in dataset]
     dataset_y = [uu[-1] for uu in dataset]
-    return (np.array(dataset_x1)[...,np.newaxis],np.array(dataset_x2)[:,:sample,:]),np.array(dataset_y)
+    if one_random_sample: #returning  one random sample from each sequence (used in baseline tests)
+        data_len = np.shape(dataset_x1)[0]
+        indx     = list(range(data_len))
+        pick_sample = np.random.randint(sample,size=data_len)
+        if return_x1_only:
+            return np.array(dataset_x1)[indx,pick_sample,...], np.array(dataset_y) #todo: understand why we need a new axis here!
+            # return np.array(dataset_x1)[indx,pick_sample,...,np.newaxis], np.array(dataset_y)
+        else:
+            return (np.array(dataset_x1)[indx,pick_sample,...,np.newaxis],np.array(dataset_x2)[:,:sample,:]),np.array(dataset_y) #todo: understand why there is an extra axis here??
+    else:
+        if return_x1_only:
+            return np.array(dataset_x1),np.array(dataset_y)
+        else:
+            return (np.array(dataset_x1)[...,np.newaxis],np.array(dataset_x2)[:,:sample,:]),np.array(dataset_y) #todo: understand why there is an extra axis here??
 
 
 def write_to_file(history, net,paramaters, dataset_number):
