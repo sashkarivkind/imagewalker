@@ -133,7 +133,7 @@ trainX, testX = prep_pixels(trainX, testX)
 path = os.getcwd() + '/'
 
 teacher = keras.models.load_model(parameters['teacher_net'])
-teacher.evaluate(trainX[45000:], trainY[45000:], verbose=2)
+#teacher.evaluate(trainX[45000:], trainY[45000:], verbose=2)
 
 
 fe_model = teacher.layers[0]
@@ -195,7 +195,7 @@ def visualize_filter(filter_index, use_img = False):
         img = initialize_image()
     loss_list = []
     for iteration in range(iterations):
-        loss, img = gradient_ascent_step(img, filter_index, learning_rate)
+        loss, img = gradient_ascent_step( img, filter_index, learning_rate)
         loss_list.append(loss)
 
     # Decode the resulting input image
@@ -226,7 +226,7 @@ import matplotlib.pyplot as plt
 # The dimensions of our input image
 img_width = 32
 img_height = 32
-for i in range(3):
+for i in range(5):
     
     loss, img = visualize_filter(i)
     

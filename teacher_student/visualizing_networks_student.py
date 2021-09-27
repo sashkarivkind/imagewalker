@@ -30,7 +30,7 @@ import pickle
 import argparse
 from feature_learning_utils import  load_student, student3
 
-
+from keras_utils import create_trajectory
 print(os.getcwd() + '/')
 #%%
 
@@ -126,10 +126,9 @@ def prep_pixels(train, test):
 # prepare pixel data
 trainX, testX = prep_pixels(trainX, testX)
 
-
 #%%
 ############################### Get Trained Student ##########################3
-student = load_student()
+student, parametrs = load_student(run_name = 'noname_j253106_t1631441888')
 
 
 #%%
@@ -147,11 +146,13 @@ img_height = 8
 feature_extractor = student
 
 # Set up a model that returns the activation values for our target layer
-# layer = fe_model.get_layer(name='max_pool2')
-# feature_extractor = keras.Model(inputs=fe_model.inputs, outputs=layer.output)
+layer = student.get_layer(name='convLSTM30')
+feature_extractor = keras.Model(inputs=student.inputs, outputs=layer.output)
 
 def compute_loss(input_image, filter_index):
+    
     activation = feature_extractor(input_image)
+    
     # We avoid border artifacts by only involving non-border pixels in the loss.
     filter_activation = activation[:, 1:-1, 1:-1, filter_index]
     
@@ -161,46 +162,54 @@ def compute_loss(input_image, filter_index):
 
 def gradient_ascent_step(img, filter_index, learning_rate):
     with tf.GradientTape() as tape:
+        traject = np.array(create_trajectory((32,32),sample = 10, style = 'spiral'))#tf.random.uniform((10,2))
+        traject = tf.expand_dims(tf.convert_to_tensor(traject), axis = 0)
         tape.watch(img)
-        loss = compute_loss(img, filter_index)
+        loss = compute_loss((img,traject), filter_index)
     # Compute gradients.
-    grads = tape.gradient(loss, img[0])
+    grads = tape.gradient(loss, img)
     # Normalize gradients.
     grads = tf.math.l2_normalize(grads)
-    orig_img = img[0] + 0
+    orig_img = img + 0
     orig_img += learning_rate * grads
-    return loss, (orig_img, img[1])
+    return loss, orig_img
 
 
-def initialize_image():
+def initialize_image(broadcast = False):
     # We start from a gray image with some random noise
     img = tf.random.uniform((1,10, img_width, img_height, 3))
-    traject = tf.random.uniform((10,2))
-    broadcast_place = np.ones(shape = [10,img_width,img_height,2])
-    for i in range(10):
-        broadcast_place[i,:,:,0] *= traject[i,0]
-        broadcast_place[i,:,:,1] *= traject[i,1]
+    traject = np.array(create_trajectory((32,32),sample = 10, style = 'spiral'))#tf.random.uniform((10,2))
+    if broadcast:
+        broadcast_place = np.ones(shape = [10,img_width,img_height,2])
+        for i in range(10):
+            broadcast_place[i,:,:,0] *= traject[i,0]
+            broadcast_place[i,:,:,1] *= traject[i,1]
+    else:
+        broadcast_place = traject
+        
     broadcast_place = tf.expand_dims(tf.convert_to_tensor(broadcast_place), axis = 0)
     # ResNet50V2 expects inputs in the range [-1, +1].
     # Here we scale our random inputs to [-0.125, +0.125]
-    return ((img - 0.5) * 0.25, broadcast_place)
+    return (img - 0.5) * 0.25# broadcast_place)
 
 
 def visualize_filter(filter_index, use_img = False):
     # We run gradient ascent for 20 steps
     iterations = 100
-    learning_rate = 20.0
+    learning_rate = 0.2
     if use_img:
         img = tf.expand_dims(tf.convert_to_tensor(images[42]), axis = 0)/255
     else:
         img = initialize_image()
     loss_list = []
     for iteration in range(iterations):
+        temp_img = keras.layers.LayerNormalization(axis = [1,2])(img)
+        img = temp_img
         loss, img = gradient_ascent_step(img, filter_index, learning_rate)
         loss_list.append(loss)
 
     # Decode the resulting input image
-    img = deprocess_image(img[0].numpy())
+    img = deprocess_image(img.numpy())
     return loss_list, img
 
 
@@ -227,10 +236,11 @@ import matplotlib.pyplot as plt
 # The dimensions of our input image
 img_width = 8
 img_height = 8
+loss_list = []
 for i in range(1):
     
-    loss, img = visualize_filter(i)
-    
+    loss, img = visualize_filter(20)
+    loss_list.append(loss)
     fig, ax = plt.subplots(3,3)
     indx = 0
     for l in range(3):
@@ -275,3 +285,6 @@ keras.preprocessing.image.save_img("stiched_filters.png", stitched_filters)
 from IPython.display import Image, display
 
 display(Image("stiched_filters.png"))
+
+#%%
+
