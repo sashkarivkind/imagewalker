@@ -24,6 +24,16 @@ import tensorflow.keras as keras
 
 
 
+def test_num_of_trajectories(gen,batch_size=32):
+    '''test how many actual trajectories are there in batch'''
+    zz=[]
+    cc=0
+    for uu in range(len(gen)):
+        for bb in range(batch_size):
+            zz.append(str(gen[uu][0][1][bb, :, 0, 0, :]))
+            cc += 1
+    return len(set(zz)), cc
+
 #Define function for low resolution lens on syclop
 def bad_res101(img,res):
     sh=np.shape(img)
@@ -38,7 +48,12 @@ def bad_res102(img,res):
 
 def create_trajectory(starting_point, n_samples = 5, style = 'brownian', noise = 0.15):
     steps = []
+
     phi = np.random.randint(0.1,2*np.pi) #the angle in polar coordinates
+    if style == 'degenerate_fix2':
+        phi = np.random.random()*2*np.pi #(0.1, 2 * np.pi)  # the angle in polar coordinates
+        style = 'degenerate_fix'
+
     speed = 0.8#np.abs(0.5 + np.random.normal(0,0.5))         #Constant added to the radios
     r = 3
     name_list = ['const direction + noise','ZigZag','spiral', 'brownian','degenerate']
@@ -64,10 +79,17 @@ def create_trajectory(starting_point, n_samples = 5, style = 'brownian', noise =
             phi_speed *=  -1
             phi += phi_speed + np.random.normal(0,phi_noise)
         elif style == 'spiral':
-            r += speed/2 + np.random.normal(-0.5,speed_noise)
+            r += speed / 2 + np.random.normal(-0.5, speed_noise)
             phi_noise = 0.1
-            phi_speed = np.random.normal((2/4)*np.pi,(1/8)*np.pi)
-            factor = 1#np.random.choice([-1,1])
+            phi_speed = np.random.normal((2 / 4) * np.pi, (1 / 8) * np.pi)
+            factor = 1  # np.random.choice([-1,1])
+            phi += factor * phi_speed
+        elif style == 'spiral_2dir' or style == 'spiral_2dir_shfl':
+            r += speed / 2 + np.random.normal(-0.5, speed_noise)
+            phi_noise = 0.1
+            phi_speed = np.random.normal((2 / 4) * np.pi, (1 / 8) * np.pi)
+            if j==0:
+                factor = np.random.choice([-1,1])
             phi += factor * phi_speed
         elif style == 'big_steps':
             r += speed/2 + np.random.normal(-0.5,speed_noise)
@@ -78,17 +100,32 @@ def create_trajectory(starting_point, n_samples = 5, style = 'brownian', noise =
         elif style == 'brownian':
             r += speed/2 + np.random.normal(-0.5,speed_noise)
             phi = np.random.randint(0.1,2*np.pi)
-        elif style == 'degenerate':
+        elif style == 'degenerate' or style == 'degenerate_fix':
             r += speed + np.random.normal(-0.5,speed_noise)
+
         elif style == 'old':
             
             starting_point += np.random.randint(-2,3,2) 
             r = 0
             phi = 0
+        else:
+            error
+
         x, y = starting_point[1] + int(r * np.cos(phi)), starting_point[0]+int(r * np.sin(phi))
+        if style == 'degenerate_fix':
+            while abs(steps[-1][0]-y)<1e-6 and abs(steps[-1][1]-x)<1e-6:
+                r += 0.5
+                x, y = starting_point[1] + int(r * np.cos(phi)), starting_point[0] + int(r * np.sin(phi))
+
         steps.append([y,x])
-        
-            
+
+        #shuffling all the trajectory except for the firs point if appropriate flag on
+        if style == 'spiral_shfl' or style == 'spiral_2dir_shfl':
+            step0 = steps[0]
+            steps_ = steps[1:]
+            random.shuffle(steps_)
+            steps = [step0] + steps_
+
     return steps
 
 
@@ -113,6 +150,28 @@ def generate_syclopic_images(images, res, n_samples = 5, mixed_state = True, add
     train_dataloader, test_dataloader - torch DataLoader class objects
 
     '''
+    def extended_trajectory_builder():
+        #Setting the coordinates to visit
+        if type(trajectory_list) is int:
+            if trajectory_list:
+                np.random.seed(trajectory_list)
+            starting_point = np.array([agent.max_q[0]//2,agent.max_q[1]//2])
+            steps = create_trajectory(starting_point= starting_point,
+                                      n_samples = n_samples,
+                                      style = style,
+                                       noise = noise)
+
+            if mixed_state and n_trajectories!= -1:
+                seed_list.append(new_seed)
+                q_sequence = np.array(steps).astype(int)
+            else:
+                if count == 0:
+                    q_sequence = np.array(steps).astype(int)
+        else:
+            q_sequence = np.array(trajectory_list[img_num]).astype(int)
+
+        return q_sequence
+    '''end of auxillary function'''
     if n_samples > max_length:
         max_length = n_samples
         print('max_length ({}) must be >= n_samples ({}), changed max_length to be == n_samples'.format(max_length, n_samples))
@@ -122,7 +181,9 @@ def generate_syclopic_images(images, res, n_samples = 5, mixed_state = True, add
     q_seq = []
     seed_list = []
     count = 0
-    if mixed_state:
+
+
+    if mixed_state and n_trajectories!= -1 :
         np.random.seed(42)
         new_seed = 42
 
@@ -139,7 +200,7 @@ def generate_syclopic_images(images, res, n_samples = 5, mixed_state = True, add
 
     for img_num,img in enumerate(images):
         ##set a random seed in the range specified by the number of trajectories
-        if n_trajectories:
+        if n_trajectories > 0:
             new_seed = random.randint(0,n_trajectories)
             np.random.seed(new_seed)    
         orig_img = img*1
@@ -150,25 +211,15 @@ def generate_syclopic_images(images, res, n_samples = 5, mixed_state = True, add
         img=misc.build_cifar_padded(1./256*img)
         img_size = img.shape
 
-
-        #Setting the coordinates to visit
-        if type(trajectory_list) is int:
-            if trajectory_list:
-                np.random.seed(trajectory_list)
+        if n_trajectories == -1:
             starting_point = np.array([agent.max_q[0]//2,agent.max_q[1]//2])
-            steps = create_trajectory(starting_point= starting_point, 
+            steps = create_trajectory(starting_point= starting_point,
                                       n_samples = n_samples,
                                       style = style,
                                        noise = noise)
-
-            if mixed_state:
-                seed_list.append(new_seed)
-                q_sequence = np.array(steps).astype(int)
-            else:
-                if count == 0:
-                    q_sequence = np.array(steps).astype(int)
+            q_sequence = np.array(steps).astype(int)
         else:
-            q_sequence = np.array(trajectory_list[img_num]).astype(int)
+            q_sequence = extended_trajectory_builder()
 
         if count == 0 and loud:
             print(q_sequence.shape)
@@ -217,7 +268,7 @@ class Syclopic_dataset_generator(keras.utils.Sequence):
     'Generates data for Keras'
     def __init__(self, images, labels, batch_size=None, movie_dim=None, position_dim=None,
                  n_classes=None, shuffle=True, syclopic_function=generate_syclopic_images,
-                 prep_data_per_batch=False,one_hot_labels=False, one_random_sample=False, validation_mode=False, loud_en=False, **kwargs):
+                 prep_data_per_batch=False,one_hot_labels=False, one_random_sample=False, validation_mode=False, loud_en=False, teacher=None, **kwargs):
         list_IDs = list(range(len(images)))
         'Initialization'
         self.images=images
@@ -235,6 +286,7 @@ class Syclopic_dataset_generator(keras.utils.Sequence):
         self.one_random_sample = one_random_sample
         self.validation_mode = validation_mode
         self.loud_en = loud_en
+        self.teacher = teacher
         if validation_mode:
             self.prep_data_per_batch = False
             if prep_data_per_batch:
@@ -284,24 +336,20 @@ class Syclopic_dataset_generator(keras.utils.Sequence):
         # Generate data
         if self.prep_data_per_batch:
             X = self.syclopic_function(self.images[list_IDs_temp],loud=self.loud,**self.kwargs)
-            y = self.labels[list_IDs_temp]
+            if self.teacher is None:
+                y = self.labels[list_IDs_temp]
             self.loud = False
         else:
-            X1 = np.empty((self.batch_size, *self.movie_dim))
-            X2 = np.empty((self.batch_size, *self.position_dim))
-            y = np.empty((self.batch_size), dtype=int)
-            # y = np.empty((self.batch_size, np.shape(labels)[1,:]))
-
-            # for i, ID in enumerate(list_IDs_temp):
-            #     X1[i,] = self.full_syclopic_view[0][ID,]
-            #     X2[i,] = self.full_syclopic_view[1][ID,]
-            #     y[i,] = self.labels[ID]
             X1 = self.full_syclopic_view[0][list_IDs_temp]
             X2 = self.full_syclopic_view[1][list_IDs_temp]
-            y = self.labels[list_IDs_temp]
+            if self.teacher is None:
+                y = self.labels[list_IDs_temp]
             X=(X1,X2)
 
-        y = keras.utils.to_categorical(y, num_classes=self.n_classes) if self.one_hot_labels else y
+        if self.teacher is None:
+            y = keras.utils.to_categorical(y, num_classes=self.n_classes) if self.one_hot_labels else y
+        else:
+            y = self.teacher.predict(self.images[list_IDs_temp])
 
         if self.one_random_sample:  # returning  one random sample from each sequence (used in baseline tests)
             data_len = np.shape(X[0])[0]

@@ -199,6 +199,8 @@ model.summary()
 
 # %% [code] {"id":"2K6RNDqtJ_xx"}
 EPOCHS = 3
+print(train_X[:5,0,0,0])
+error
 history = model.fit(train_X, training_labels, epochs=EPOCHS, validation_data=(valid_X, validation_labels),
                     batch_size=64)
 

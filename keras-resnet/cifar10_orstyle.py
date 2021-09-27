@@ -28,13 +28,17 @@ import resnetpa
 import orram_style_nets
 lsbjob = os.getenv('LSB_JOBID')
 lsbjob = '' if lsbjob is None else lsbjob
+import cifar10_resnet50_lowResBaseline as cifar10_resnet50
 
 parser = argparse.ArgumentParser()
-parser.add_argument('--network_topology', default='default', type=str, help='default or v2')
+# parser.add_argument('--network_topology', default='default', type=str, help='default or v2')
+parser.add_argument('--network_topology', default='resnet50_on_imagenet', type=str, help='default or v2')
+
 
 parser.add_argument('--resblocks', default=3, type=int, help='resblocks')
 parser.add_argument('--resblocks16', default=3, type=int, help='resblocks')
 parser.add_argument('--resblocks8', default=3, type=int, help='resblocks')
+parser.add_argument('--epochs', default=200, type=int, help='epochs')
 
 parser.add_argument('--last_layer_size', default=128, type=int, help='last_layer_size')
 parser.add_argument('--dropout1', default=0.2, type=float, help='dropout1')
@@ -73,6 +77,9 @@ parser.add_argument('--manual_suffix', default='', type=str, help='manual suffix
 parser.add_argument('--data_augmentation', dest='data_augmentation', action='store_true')
 parser.add_argument('--no-data_augmentation', dest='data_augmentation', action='store_false')
 
+parser.add_argument('--compile_on_spot', dest='compile_on_spot', action='store_true')
+parser.add_argument('--no-compile_on_spot', dest='compile_on_spot', action='store_false')
+
 parser.add_argument('--rotation_range', default=0.0, type=float, help='dropout1')
 parser.add_argument('--width_shift_range', default=0.1, type=float, help='dropout2')
 parser.add_argument('--height_shift_range', default=0.1, type=float, help='dropout2')
@@ -82,7 +89,8 @@ parser.set_defaults(data_augmentation=True,
                     layer_norm_2=True,
                     skip_conn=True,skip_conn8=True,skip_conn16=True,
                     dense_interface=False,
-                    last_maxpool_en=True)
+                    last_maxpool_en=True,
+                    compile_on_spot=True)
 
 config = parser.parse_args()
 config = vars(config)
@@ -96,7 +104,7 @@ csv_logger = CSVLogger('resnet_cifar10_{}.csv'.format(this_run_suffix))
 batch_size = 32
 validate_at_last = 5000
 nb_classes = 10
-nb_epoch = 200
+nb_epoch = config['epochs']
 data_augmentation = True
 
 # input image dimensions
@@ -121,14 +129,33 @@ X_val = X_train[-validate_at_last:].astype('float32')
 X_train = X_train[:-validate_at_last].astype('float32')
 
 # subtract mean and normalize
-mean_image = np.mean(X_train, axis=0)
-X_train -= mean_image
-X_val -= mean_image
-X_train /= config['dataset_norm']
-X_val /= config['dataset_norm']
+if  config['network_topology'] == 'resnet50_on_imagenet':
+    X_train = cifar10_resnet50.preprocess_image_input(X_train)
+    X_val = cifar10_resnet50.preprocess_image_input(X_val)
+else:
+    mean_image = np.mean(X_train, axis=0)
+    X_train -= mean_image
+    X_val -= mean_image
+    X_train /= config['dataset_norm']
+    X_val /= config['dataset_norm']
 
 
-if config['network_topology'] == 'v2':
+if config['network_topology'] == 'resnet50_on_imagenet':
+    model = cifar10_resnet50.define_compile_split_model(metrics=['sparse_categorical_accuracy'])
+    # model = orram_style_nets.parametric_net_befe_v2(dropout1=config['dropout1'],
+    #                                                 dropout2=config['dropout2'],
+    #                                                 resblocks16=config['resblocks16'],
+    #                                                 resblocks8=config['resblocks8'],
+    #                                                 layer_norm_res16=config['layer_norm_res16'],
+    #                                                 layer_norm_res8=config['layer_norm_res8'],
+    #                                                 layer_norm_2=config['layer_norm_2'],
+    #                                                 skip_conn16=config['skip_conn16'],
+    #                                                 skip_conn8=config['skip_conn8'],
+    #                                                 dense_interface=config['dense_interface'],
+    #                                                 last_maxpool_en=config['last_maxpool_en'],
+    #                                                 nl=config['nl'],
+    #                                                 last_layer_size=config['last_layer_size'])
+elif config['network_topology'] == 'v2':
     model =orram_style_nets.parametric_net_befe_v2(dropout1=config['dropout1'],
                                                    dropout2=config['dropout2'],
                                                    resblocks16=config['resblocks16'],
@@ -156,15 +183,16 @@ elif config['network_topology'] == 'default':
 else:
     error
 
-model.compile(loss='sparse_categorical_crossentropy', #todo
-              optimizer='adam',
-              metrics=['sparse_categorical_accuracy'])
+if config['compile_on_spot']:
+    model.compile(loss='sparse_categorical_crossentropy', #todo
+                  optimizer='adam',
+                  metrics=['sparse_categorical_accuracy'])
 
 if not config['data_augmentation']:
     print('Not using data augmentation.')
     model.fit(X_train, Y_train,
               batch_size=batch_size,
-              nb_epoch=nb_epoch,
+              epochs=nb_epoch,
               validation_data=(X_val, Y_val),
               shuffle=True,
               callbacks=[lr_reducer, early_stopper, csv_logger])

@@ -165,12 +165,13 @@ def save_model(net,path,parameters,checkpoint = True):
     #LOADING WITH - load_status = sequential_model.load_weights("ckpt")
     
 
-def load_student(path = '/home/orram/Documents/GitHub/imagewalker/teacher_student/',  run_name = 'noname_j178_t1630240486'):
+def load_student(path = '/home/orram/Documents/GitHub/imagewalker/teacher_student/',  run_name = 'noname_j178_t1630240486', student=None):
 
 
     temp_path = path + 'saved_models/{}_feature/'.format(run_name)
     home_folder = temp_path + '{}_saved_models/'.format(run_name)
-    
+    # home_folder = path
+
     child_folder = home_folder + 'end_of_run_model/'
     
     
@@ -178,22 +179,24 @@ def load_student(path = '/home/orram/Documents/GitHub/imagewalker/teacher_studen
     numpy_weights_path = child_folder + '{}_numpy_weights/'.format(run_name)
     with open(numpy_weights_path + 'numpy_weights_{}'.format(run_name), 'rb') as file_pi:
         np_weights = pickle.load(file_pi)
-        
-    data = pd.read_pickle(path + 'feature_learning/summary_dataframe_feature_learning_full_train_103.pkl')
-    parameters = data[data['this_run_name'] == run_name].to_dict('records')[0]
-    
-    
-    numpy_student = student3(sample = int(parameters['max_length']), 
-                       res = int(parameters['res']), 
-                        activation = parameters['student_nl'],
-                        dropout = parameters['dropout'], 
-                        rnn_dropout = parameters['rnn_dropout'],
-                        num_feature = int(parameters['num_feature']),
-                       layer_norm = parameters['layer_norm_student'],
-                       conv_rnn_type = parameters['conv_rnn_type'],
-                       block_size = int(parameters['student_block_size']),
-                       add_coordinates = parameters['broadcast'],
-                       time_pool = parameters['time_pool'])
+
+    if student is None:
+        data = pd.read_pickle(path + 'feature_learning/summary_dataframe_feature_learning_full_train_103.pkl')
+        parameters = data[data['this_run_name'] == run_name].to_dict('records')[0]
+        numpy_student = student3(sample = int(parameters['max_length']),
+                           res = int(parameters['res']),
+                            activation = parameters['student_nl'],
+                            dropout = parameters['dropout'],
+                            rnn_dropout = parameters['rnn_dropout'],
+                            num_feature = int(parameters['num_feature']),
+                           layer_norm = parameters['layer_norm_student'],
+                           conv_rnn_type = parameters['conv_rnn_type'],
+                           block_size = int(parameters['student_block_size']),
+                           add_coordinates = parameters['broadcast'],
+                           time_pool = parameters['time_pool'])
+    else:
+        numpy_student = student
+        parameters = []
     layer_index = 0
     for layer in numpy_student.layers:
         if layer.name[:-2] == 'convLSTM':
@@ -204,13 +207,14 @@ def load_student(path = '/home/orram/Documents/GitHub/imagewalker/teacher_studen
             
     return numpy_student, parameters
 
-def student3(sample = 10, res = 8, activation = 'tanh', dropout = 0.0, rnn_dropout = 0.0,
-             num_feature = 1, layer_norm = False , n_layers=3, conv_rnn_type='lstm',block_size = 1,
+def student3(sample = 10, res = 8, activation = 'tanh', dropout = 0.0, rnn_dropout = 0.0, upsample = 0,
+             num_feature = 1, layer_norm = False ,batch_norm = False, n_layers=3, conv_rnn_type='lstm',block_size = 1,
              add_coordinates = False, time_pool = False, coordinate_mode=1, attention_net_size=64, attention_net_depth=1,
              rnn_layer1=32,
              rnn_layer2=64,
-             dense_interface=False
-             ):
+             dense_interface=False,
+            loss="mean_squared_error",
+             **kwargs):
     #TO DO add option for different block sizes in every convcnn
     #TO DO add skip connections in the block
     #coordinate_mode 1 - boardcast,
@@ -240,6 +244,10 @@ def student3(sample = 10, res = 8, activation = 'tanh', dropout = 0.0, rnn_dropo
                 a = keras.layers.GRU(attention_net_size, input_shape=(sample, None), return_sequences=True)(a)
     else:
         x = inputA
+
+    if upsample != 0:
+        x = keras.layers.TimeDistributed(keras.layers.UpSampling2D(size=(upsample, upsample)))(x)
+
     print(x.shape)
     for ind in range(block_size):
         x = Our_RNN_cell(rnn_layer1,(3,3), padding = 'same', return_sequences=True,
@@ -281,6 +289,8 @@ def student3(sample = 10, res = 8, activation = 'tanh', dropout = 0.0, rnn_dropo
         x = tf.squeeze(x,1)
     if layer_norm:
         x = keras.layers.LayerNormalization(axis=3)(x)
+    if batch_norm:
+        x = keras.layers.BatchNormalization()(x)
 
     print(x.shape)
     model = keras.models.Model(inputs=[inputA,inputB],outputs=x, name = 'student_3')
@@ -288,8 +298,8 @@ def student3(sample = 10, res = 8, activation = 'tanh', dropout = 0.0, rnn_dropo
 
     model.compile(
         optimizer=opt,
-        loss="mean_squared_error",
-        metrics=["mean_squared_error"],
+        loss=loss,
+        metrics=["mean_squared_error", "mean_absolute_error", "cosine_similarity"],
     )
     return model
 
@@ -341,3 +351,189 @@ def student32(sample = 10):
 
     return model
 
+def student4(sample = 10, res = 8, activation = 'tanh', dropout = 0.0, rnn_dropout = 0.0,
+             num_feature = 1, layer_norm = False , n_layers=3, conv_rnn_type='lstm',block_size = 1,
+             add_coordinates = False, time_pool = False, coordinate_mode=1, attention_net_size=64, attention_net_depth=1,
+             rnn_layer1=32,
+             rnn_layer2=64,
+             dense_interface=False, loss="mean_squared_error",**kwargs
+             ):
+    #TO DO add option for different block sizes in every convcnn
+    #TO DO add skip connections in the block
+    #coordinate_mode 1 - boardcast,
+    #coordinate_mode 2 - add via attention block
+    if time_pool == '0':
+        time_pool = 0
+    inputA = keras.layers.Input(shape=(sample, res,res,3))
+    if add_coordinates and coordinate_mode==1:
+        inputB = keras.layers.Input(shape=(sample,res,res,2))
+    else:
+        inputB = keras.layers.Input(shape=(sample,2))
+    if conv_rnn_type == 'lstm':
+        Our_RNN_cell = keras.layers.ConvLSTM2D
+    elif  conv_rnn_type == 'gru':
+        Our_RNN_cell = ConvGRU2D
+    else:
+        error("not supported type of conv rnn cell")
+
+    #Broadcast the coordinates to a [res,res,2] matrix and concat to x
+    if add_coordinates:
+        if coordinate_mode==1:
+            x = keras.layers.Concatenate()([inputA,inputB])
+        elif coordinate_mode==2:
+            x = inputA
+            a = keras.layers.GRU(attention_net_size,input_shape=(sample, None),return_sequences=True)(inputB)
+            for ii in range(attention_net_depth-1):
+                a = keras.layers.GRU(attention_net_size, input_shape=(sample, None), return_sequences=True)(a)
+    else:
+        x = inputA
+    print(x.shape)
+    x = Our_RNN_cell(rnn_layer1, (3, 3), padding='same', return_sequences=True,
+                     dropout=dropout, recurrent_dropout=rnn_dropout,
+                     name='convLSTM0{}'.format(0))(x)
+    for ind in range(block_size):
+        skip = x
+        x = Our_RNN_cell(rnn_layer2,(3,3), padding = 'same', return_sequences=True,
+                                dropout = dropout,recurrent_dropout=rnn_dropout,
+                            name = 'convLSTM1{}'.format(ind))(x)
+        x = Our_RNN_cell(rnn_layer2,(3,3), padding = 'same', return_sequences=True,
+                            name = 'convLSTM2{}'.format(ind),
+                            dropout = dropout,recurrent_dropout=rnn_dropout,)(x)
+        x = Our_RNN_cell(rnn_layer1, (3, 3), padding='same', return_sequences=True,
+                         dropout=dropout, recurrent_dropout=rnn_dropout,
+                         name='convLSTM3{}'.format(ind))(x)
+        x = keras.layers.add([x, skip])
+        x = keras.layers.LayerNormalization(axis=-1)(x)
+        if add_coordinates and coordinate_mode==2:
+            a_ = keras.layers.TimeDistributed(keras.layers.Dense(64,activation="tanh"))(a)
+            a_ = keras.layers.Reshape((sample, 1, 1, -1))(a_)
+            x = x * a_
+    if time_pool:
+        return_seq = True
+    else:
+        return_seq = False
+    x = Our_RNN_cell(num_feature,(3,3), padding = 'same', return_sequences=return_seq,
+                        name = 'convLSTM_f{}'.format(ind), activation=activation,
+                        dropout = dropout,recurrent_dropout=rnn_dropout,)(x)
+    if dense_interface:
+        if return_seq:
+            x = keras.layers.TimeDistributed(keras.layers.Conv2D(64, (3, 3), padding='same',
+                                    name='anti_sparse'))(x)
+        else:
+            x = keras.layers.Conv2D(64, (3, 3), padding='same',
+                                    name='anti_sparse')(x)
+    print(return_seq)
+    if time_pool:
+        print(time_pool)
+        if time_pool == 'max_pool':
+            x = tf.keras.layers.MaxPooling3D(pool_size=(sample, 1, 1))(x)
+        elif time_pool == 'average_pool':
+            x = tf.keras.layers.AveragePooling3D(pool_size=(sample, 1, 1))(x)
+        x = tf.squeeze(x,1)
+    if layer_norm:
+        x = keras.layers.LayerNormalization(axis=3)(x)
+
+    print(x.shape)
+    model = keras.models.Model(inputs=[inputA,inputB],outputs=x, name = 'student_3')
+    opt=tf.keras.optimizers.Adam(lr=1e-3)
+
+    model.compile(
+        optimizer=opt,
+        loss=loss,
+        metrics=["mean_squared_error", "mean_absolute_error", "cosine_similarity"],
+    )
+    return model
+
+def student5(sample = 10, res = 8, activation = 'tanh', dropout = 0.0, rnn_dropout = 0.0,
+             num_feature = 1, layer_norm = False , n_layers=3, conv_rnn_type='lstm',block_size = 1,
+             add_coordinates = False, time_pool = False, coordinate_mode=1, attention_net_size=64, attention_net_depth=1,
+             rnn_layer1=32,
+             rnn_layer2=64,
+             dense_interface=False, loss="mean_squared_error", **kwargs
+             ):
+    #TO DO add option for different block sizes in every convcnn
+    #TO DO add skip connections in the block
+    #coordinate_mode 1 - boardcast,
+    #coordinate_mode 2 - add via attention block
+    if time_pool == '0':
+        time_pool = 0
+    inputA = keras.layers.Input(shape=(sample, res,res,3))
+    if add_coordinates and coordinate_mode==1:
+        inputB = keras.layers.Input(shape=(sample,res,res,2))
+    else:
+        inputB = keras.layers.Input(shape=(sample,2))
+    if conv_rnn_type == 'lstm':
+        Our_RNN_cell = keras.layers.ConvLSTM2D
+    elif  conv_rnn_type == 'gru':
+        Our_RNN_cell = ConvGRU2D
+    else:
+        error("not supported type of conv rnn cell")
+
+    #Broadcast the coordinates to a [res,res,2] matrix and concat to x
+    if add_coordinates:
+        if coordinate_mode==1:
+            x = keras.layers.Concatenate()([inputA,inputB])
+        elif coordinate_mode==2:
+            x = inputA
+            a = keras.layers.GRU(attention_net_size,input_shape=(sample, None),return_sequences=True)(inputB)
+            for ii in range(attention_net_depth-1):
+                a = keras.layers.GRU(attention_net_size, input_shape=(sample, None), return_sequences=True)(a)
+    else:
+        x = inputA
+    print(x.shape)
+    x = Our_RNN_cell(rnn_layer1, (3, 3), padding='same', return_sequences=True,
+                     dropout=dropout, recurrent_dropout=rnn_dropout,
+                     name='convLSTM0{}'.format(0))(x)
+    for ind in range(block_size):
+        skip = x
+        x = Our_RNN_cell(rnn_layer2,(3,3), padding = 'same', return_sequences=True,
+                                dropout = dropout,recurrent_dropout=rnn_dropout,
+                            name = 'convLSTM1{}'.format(ind))(x)
+        x = Our_RNN_cell(rnn_layer2,(3,3), padding = 'same', return_sequences=True,
+                            name = 'convLSTM2{}'.format(ind),
+                            dropout = dropout,recurrent_dropout=rnn_dropout,)(x)
+        x = Our_RNN_cell(rnn_layer1, (3, 3), padding='same', return_sequences=True,
+                         dropout=dropout, recurrent_dropout=rnn_dropout,
+                         name='convLSTM3{}'.format(ind))(x)
+        x = keras.layers.LayerNormalization(axis=-1)(x)
+        x = keras.layers.add([x, skip])
+
+        if add_coordinates and coordinate_mode==2:
+            a_ = keras.layers.TimeDistributed(keras.layers.Dense(64,activation="tanh"))(a)
+            a_ = keras.layers.Reshape((sample, 1, 1, -1))(a_)
+            x = x * a_
+    if time_pool:
+        return_seq = True
+    else:
+        return_seq = False
+    x = Our_RNN_cell(num_feature,(3,3), padding = 'same', return_sequences=return_seq,
+                        name = 'convLSTM_f{}'.format(ind), activation=activation,
+                        dropout = dropout,recurrent_dropout=rnn_dropout,)(x)
+    if dense_interface:
+        if return_seq:
+            x = keras.layers.TimeDistributed(keras.layers.Conv2D(64, (3, 3), padding='same',
+                                    name='anti_sparse'))(x)
+        else:
+            x = keras.layers.Conv2D(64, (3, 3), padding='same',
+                                    name='anti_sparse')(x)
+    print(return_seq)
+    if time_pool:
+        print(time_pool)
+        if time_pool == 'max_pool':
+            x = tf.keras.layers.MaxPooling3D(pool_size=(sample, 1, 1))(x)
+        elif time_pool == 'average_pool':
+            x = tf.keras.layers.AveragePooling3D(pool_size=(sample, 1, 1))(x)
+        x = tf.squeeze(x,1)
+    if layer_norm:
+        x = keras.layers.LayerNormalization(axis=3)(x)
+
+    print(x.shape)
+    model = keras.models.Model(inputs=[inputA,inputB],outputs=x, name = 'student_3')
+    opt=tf.keras.optimizers.Adam(lr=1e-3)
+
+    model.compile(
+        optimizer=opt,
+        loss=loss,
+        metrics=["mean_squared_error","mean_absolute_error","cosine_similarity"],
+    )
+    return model

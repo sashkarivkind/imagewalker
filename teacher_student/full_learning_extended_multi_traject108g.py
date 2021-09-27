@@ -23,7 +23,7 @@ import pandas as pd
 import time
 import pickle
 import argparse
-from feature_learning_utils import  student3,  write_to_file, traject_learning_dataset_update,  net_weights_reinitializer
+from feature_learning_utils import  student3,student4,student5,  write_to_file, traject_learning_dataset_update,  net_weights_reinitializer
 from keras_utils import create_cifar_dataset, split_dataset_xy
 from dataset_utils import Syclopic_dataset_generator
 
@@ -48,15 +48,20 @@ parser.add_argument('--no-testmode', dest='testmode', action='store_false')
 ### student parameters
 parser.add_argument('--epochs', default=1, type=int, help='num training epochs')
 parser.add_argument('--int_epochs', default=1, type=int, help='num internal training epochs')
-parser.add_argument('--decoder_epochs', default=20, type=int, help='num internal training epochs')
+parser.add_argument('--decoder_epochs', default=40, type=int, help='num internal training epochs')
 parser.add_argument('--num_feature', default=64, type=int, help='legacy to be discarded')
 parser.add_argument('--rnn_layer1', default=32, type=int, help='legacy to be discarded')
 parser.add_argument('--rnn_layer2', default=64, type=int, help='legacy to be discarded')
 parser.add_argument('--time_pool', default=0, help='time dimention pooling to use - max_pool, average_pool, 0')
 
 parser.add_argument('--student_block_size', default=1, type=int, help='number of repetition of each convlstm block')
+parser.add_argument('--upsample', default=0, type=int, help='spatial upsampling of input 0 for no')
+
+
 parser.add_argument('--conv_rnn_type', default='lstm', type=str, help='conv_rnn_type')
 parser.add_argument('--student_nl', default='relu', type=str, help='non linearity')
+parser.add_argument('--decoder_optimizer', default='Adam', type=str, help='Adam or SGD')
+
 parser.add_argument('--dropout', default=0.2, type=float, help='dropout1')
 parser.add_argument('--rnn_dropout', default=0.0, type=float, help='dropout1')
 conv_rnn_type='lstm'
@@ -72,6 +77,7 @@ parser.add_argument('--res', default=8, type=int, help='resolution')
 parser.add_argument('--trajectories_num', default=10, type=int, help='number of trajectories to use')
 parser.add_argument('--broadcast', default=0, type=int, help='1-integrate the coordinates by broadcasting them as extra dimentions, 2- add coordinates as an extra input')
 parser.add_argument('--style', default='brownain', type=str, help='choose syclops style of motion')
+parser.add_argument('--loss', default='mean_squared_error', type=str, help='loss type for student')
 parser.add_argument('--noise', default=0.15, type=float, help='added noise to the const_p_noise style')
 parser.add_argument('--max_length', default=5, type=int, help='choose syclops max trajectory length')
 
@@ -80,6 +86,8 @@ parser.add_argument('--max_length', default=5, type=int, help='choose syclops ma
 parser.add_argument('--teacher_net', default='/home/orram/Documents/GitHub/imagewalker/teacher_student/model_510046__1628691784.hdf', type=str, help='path to pretrained teacher net')
 
 parser.add_argument('--resblocks', default=3, type=int, help='resblocks')
+parser.add_argument('--student_version', default=3, type=int, help='student version')
+
 parser.add_argument('--last_layer_size', default=128, type=int, help='last_layer_size')
 
 
@@ -171,8 +179,8 @@ trainX, testX = prep_pixels(trainX, testX)
 path = os.getcwd() + '/'
 if True:
     teacher = keras.models.load_model(parameters['teacher_net'])
+    teacher.summary()
     teacher.evaluate(trainX[45000:], trainY[45000:], verbose=2)
-
 
     fe_model = teacher.layers[0]
     be_model = teacher.layers[1]
@@ -188,7 +196,8 @@ if True:
     end = batch_size
     train_data = []
     validation_data = []
-    train_data = np.zeros([50000,res,res,num_feature])
+    upsample_factor = parameters['upsample'] if parameters['upsample'] !=0 else 1
+    train_data = np.zeros([50000,upsample_factor*res,upsample_factor*res,num_feature])
     count = 0
 
     feature_space = 64
@@ -226,7 +235,6 @@ if True:
     model_checkpoint_callback = tf.keras.callbacks.ModelCheckpoint(
         filepath=checkpoint_filepath,
         save_weights_only=True,
-        monitor='val_mean_squared_error',
         mode='min',
         save_best_only=True)
     lr_reducer = keras.callbacks.ReduceLROnPlateau(factor=np.sqrt(0.1),
@@ -234,7 +242,6 @@ if True:
                                                    patience=5,
                                                    min_lr=0.5e-6)
     early_stopper = keras.callbacks.EarlyStopping(
-                                                  monitor='val_mean_squared_error',
                                                   min_delta=5e-5,
                                                   patience=10,
                                                   verbose=0,
@@ -272,7 +279,17 @@ if True:
         #LOADING WITH - load_status = sequential_model.load_weights("ckpt")
 
     #%%
-student = student3(sample = parameters['max_length'],
+
+if parameters['student_version']==3:
+    student_fun = student3
+elif parameters['student_version'] == 4:
+    student_fun = student4
+elif parameters['student_version'] == 5:
+    student_fun = student5
+else:
+    error
+
+student = student_fun(sample = parameters['max_length'],
                    res = res,
                     activation = parameters['student_nl'],
                     dropout = dropout,
@@ -285,7 +302,9 @@ student = student3(sample = parameters['max_length'],
                    block_size = parameters['student_block_size'],
                    add_coordinates = parameters['broadcast'],
                    time_pool = parameters['time_pool'],
-                   dense_interface=parameters['dense_interface'])
+                   dense_interface=parameters['dense_interface'],
+                    loss=parameters['loss'],
+                      upsample=parameters['upsample'])
 
 train_accur = []
 test_accur = []
@@ -301,7 +320,7 @@ generator_params = args_to_dict(batch_size=BATCH_SIZE, movie_dim=movie_dim, posi
                                     res = parameters['res'],
                                     n_samples = parameters['n_samples'],
                                     mixed_state = True,
-                                    add_seed = parameters['trajectories_num'],
+                                    n_trajectories = parameters['trajectories_num'],
                                     trajectory_list = 0,
                                     broadcast=parameters['broadcast'],
                                     style = parameters['style'],
@@ -349,7 +368,13 @@ input1 = keras.layers.Input(shape=position_dim)
 x = student((input0,input1))
 x = decoder(x)
 fro_student_and_decoder = keras.models.Model(inputs=[input0,input1], outputs=x, name='frontend')
-opt=tf.keras.optimizers.Adam(lr=1e-3)
+if parameters['decoder_optimizer'] == 'Adam':
+    opt=tf.keras.optimizers.Adam(lr=2.5e-4)
+elif parameters['decoder_optimizer'] == 'SGD':
+    opt=tf.keras.optimizers.SGD(lr=2.5e-3)
+else:
+    error
+
 fro_student_and_decoder.compile(
         optimizer=opt,
         loss="sparse_categorical_crossentropy",

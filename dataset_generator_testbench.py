@@ -60,11 +60,18 @@ parser.add_argument('--no-layer_norm_student', dest='layer_norm_student', action
 parser.add_argument('--trajectory_index', default=0, type=int, help='trajectory index - set to 0 because we use multiple trajectories')
 parser.add_argument('--n_samples', default=5, type=int, help='sample')
 parser.add_argument('--res', default=8, type=int, help='resolution')
-parser.add_argument('--trajectories_num', default=10, type=int, help='number of trajectories to use')
+parser.add_argument('--trajectories_num', default=-1, type=int, help='number of trajectories to use')
 parser.add_argument('--broadcast', default=1, type=int, help='1-integrate the coordinates by broadcasting them as extra dimentions, 2- add coordinates as an extra input')
-parser.add_argument('--style', default='brownain', type=str, help='choose syclops style of motion')
-parser.add_argument('--noise', default=0.15, type=float, help='added noise to the const_p_noise style')
+# parser.add_argument('--style', default='spiral_2dir', type=str, help='choose syclops style of motion')
+# parser.add_argument('--style', default='spiral', type=str, help='choose syclops style of motion')
+parser.add_argument('--style', default='degenerate_fix2', type=str, help='choose syclops style of motion')
+# parser.add_argument('--style', default='ZigZag', type=str, help='choose syclops style of motion')
+# parser.add_argument('--style', default='const_p_noise', type=str, help='choose syclops style of motion')
+# parser.add_argument('--style', default='spiral_2dir_shfl', type=str, help='choose syclops style of motion')
+# parser.add_argument('--style', default='brownian', type=str, help='choose syclops style of motion')
+parser.add_argument('--noise', default=0.5, type=float, help='added noise to the const_p_noise style')
 parser.add_argument('--max_length', default=5, type=int, help='choose syclops max trajectory length')
+parser.add_argument('--val_set_mult', default=2, type=int, help='repetitions of validation dataset to reduce trajectory noise')
 
 
 ### teacher network parameters
@@ -126,14 +133,14 @@ generator_params = args_to_dict(batch_size=BATCH_SIZE, movie_dim=(parameters['n_
                                     res = parameters['res'],
                                     n_samples = parameters['n_samples'],
                                     mixed_state = True,
-                                    add_seed = parameters['trajectories_num'],
+                                    n_trajectories = parameters['trajectories_num'],
                                     trajectory_list = 0,
                                     broadcast=parameters['broadcast'],
                                     style = parameters['style'],
                                     max_length=parameters['max_length'],
                                     noise = parameters['noise'])
 train_generator = Syclopic_dataset_generator(images[:5000], labels[:5000], **generator_params)
-val_generator = Syclopic_dataset_generator(images[-5000:], labels[-5000:], validation_mode=True, **generator_params)
+val_generator = Syclopic_dataset_generator(images[-5000:].repeat(parameters['val_set_mult'],axis=0), labels[-5000:].repeat(parameters['val_set_mult'],axis=0), validation_mode=True, **generator_params)
 
 train_generator_pic = Syclopic_dataset_generator(images[:5000], images[:5000,:8,:8,:]+1, **generator_params)
 val_generator_pic = Syclopic_dataset_generator(images[-5000:], images[-5000:,:8,:8,:]+1, validation_mode=True, **generator_params)
@@ -174,9 +181,21 @@ model2.compile(
 model2.summary()
 
 # model.fit_generator(train_generator,  validation_data=val_generator, epochs=5, workers=8, use_multiprocessing=True)
-ppp=model(val_generator[0])
-print('prediction shape',ppp.shape )
-print('val_generator len',len(val_generator))
+# ppp=model(val_generator[0])
+# print('---------')
+# def test_num_of_trajectories(gen,batch_size=32):
+#     zz=[]
+#     cc=0
+#     for uu in range(len(gen)):
+#         for bb in range(batch_size):
+#             zz.append(str(gen[uu][0][1][bb, :, 0, 0, :]))
+#             cc += 1
+#     return len(set(zz)), cc
+# print('---------')
+# print('-------- total trajectories {}, out of tries: {}'.format( *test_num_of_trajectories(val_generator)))
+
+# print('prediction shape',ppp.shape )
+# print('val_generator len',len(val_generator))
 # print('evaluating train set')
 # for ii in range(10):
 #     model.evaluate(train_generator, workers=8, use_multiprocessing=True)
@@ -185,3 +204,15 @@ print('val_generator len',len(val_generator))
 #     model.evaluate(val_generator, workers=8, use_multiprocessing=True)
 #
 # model2.fit_generator(train_generator_pic,  validation_data=val_generator_pic, epochs=5, workers=8, use_multiprocessing=True)
+import matplotlib.pyplot as plt
+zz = []
+cc = 0
+plt.figure()
+for uu in range(3):
+    for bb in range(3):
+        traj=val_generator[uu][0][1][bb, :, 0, 0, :]
+        cc += 1
+        plt.subplot(3,3,bb*3+uu+1)
+        plt.plot(traj[:,0],traj[:,1],'-o')
+        plt.title(parameters['style'])
+plt.show()
