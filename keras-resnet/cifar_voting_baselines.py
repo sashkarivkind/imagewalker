@@ -4,6 +4,7 @@ import numpy as np
 import sys
 
 sys.path.insert(1, '/home/labs/ahissarlab/arivkind/imagewalker')
+sys.path.insert(1, '/home/labs/ahissarlab/arivkind/imagewalker')
 sys.path.insert(1, '/home/bnapp/arivkindNet/imagewalker/')
 # sys.path.insert(1, '/home/labs/ahissarlab/orra/imagewalker')
 # sys.path.insert(1, '/home/orram/Documents/GitHub/imagewalker')
@@ -28,6 +29,10 @@ import argparse
 # import tensorflow_datasets as tfds
 import pdb
 from split_keras_model import split_model
+from tensorflow.keras.callbacks import ReduceLROnPlateau, CSVLogger, EarlyStopping
+
+from dataset_utils import Syclopic_dataset_generator, test_num_of_trajectories
+
 print("Tensorflow version " + tf.__version__)
 
 # (training_images, training_labels), (test_images, test_labels) = tf.keras.datasets.cifar10.load_data()
@@ -141,17 +146,22 @@ if __name__ == "__main__":
 
     parser = argparse.ArgumentParser()
 
-    parser.add_argument('--res', default=32, type=int, help='resolution')
-    parser.add_argument('--n_classes', default=100, type=int, help='epochs')
+    parser.add_argument('--res', default=8, type=int, help='resolution')
+    parser.add_argument('--n_classes', default=10, type=int, help='epochs')
 
-    parser.add_argument('--epochs', default=10, type=int, help='num training epochs')
-    parser.add_argument('--sample', default=1, type=int, help='num of samplese per trajectory')
-    parser.add_argument('--trajectories_num', default=10, type=int, help='number of trajectories to use')
+    parser.add_argument('--epochs', default=100, type=int, help='num training epochs')
+    parser.add_argument('--n_samples', default=5, type=int, help='num of samplese per trajectory')
+    parser.add_argument('--trajectories_num', default=-1, type=int, help='number of trajectories to use')
     parser.add_argument('--broadcast', default=0, type=int,
                         help='1-integrate the coordinates by broadcasting them as extra dimentions, 2- add coordinates as an extra input')
-    parser.add_argument('--style', default='brownain', type=str, help='choose syclops style of motion')
+    parser.add_argument('--style', default='brownian', type=str, help='choose syclops style of motion')
     parser.add_argument('--noise', default=0.15, type=float, help='added noise to the const_p_noise style')
     parser.add_argument('--max_length', default=1, type=int, help='choose syclops max trajectory length')
+    parser.add_argument('--val_set_mult', default=5, type=int,
+                        help='repetitions of validation dataset to reduce trajectory noise')
+
+    parser.add_argument('--stopping_patience', default=10, type=int, help='stopping patience')
+    parser.add_argument('--learning_patience', default=5, type=int, help='stopping patience')
 
     config = parser.parse_args()
     config = vars(config)
@@ -171,7 +181,7 @@ if __name__ == "__main__":
     # new_res = int(sys.argv[1])
     print('-----------setting resolution to {} ------'.format(res))
 
-    model = define_compile_model(res=parameters['res'],n_classes=parameters['n_classes'])
+    model = define_compile_model(res=parameters['res'],n_classes=parameters['n_classes'],  metrics=['sparse_categorical_accuracy'])
     model.summary()
 
     # train_X = preprocess_image_input(training_images)
@@ -185,57 +195,63 @@ if __name__ == "__main__":
 
     images, labels = trainX, trainY
 
-    for epoch in range(parameters['epochs']):
-        train_dataset, test_dataset, seed_list = create_cifar_dataset(images, labels,res = res,
-                                        sample = parameters['sample'], return_datasets=True,
-                                        mixed_state = True,
-                                        add_seed = parameters['trajectories_num'],
-                                        trajectory_list = 0,
-                                        broadcast=parameters['broadcast'],
-                                        style = parameters['style'],
-                                        max_length=parameters['max_length'],
-                                        noise = parameters['noise'],
-                                        )
-        opt_dict = {'sample':parameters['sample'], 'one_random_sample':True, 'return_x1_only':True}
+    # trainX=preprocess_image_input(trainX)
+    # trainX=preprocess_image_input(testX)
+    scale = 255
+    preprocess_fun = lambda x: preprocess_image_input(scale*x)
 
-        train_dataset_x, train_dataset_y = split_dataset_xy(train_dataset, **opt_dict)
-        test_dataset_x, test_dataset_y = split_dataset_xy(test_dataset, **opt_dict)
-        # pdb.set_trace()
-        train_dataset_x = preprocess_image_input(255*train_dataset_x)
-        test_dataset_x = preprocess_image_input(255*test_dataset_x)
-        # print(train_dataset_x[0, 0, :, :])
-        # print(train_dataset_x[0].std(),train_dataset_x[0].mean())
-        # print(train_dataset_x[1].std(),train_dataset_x[1].mean())
-        # print(train_dataset_x.shape)
-        # error
-        history = model.fit(train_dataset_x, train_dataset_y, epochs=1, validation_data=(test_dataset_x, test_dataset_y),
-                            batch_size=64, verbose=2)
+    position_dim = (parameters['n_samples'], parameters['res'], parameters['res'], 2) if parameters['broadcast'] == 1 else (parameters['n_samples'], 2)
+    movie_dim = (parameters['n_samples'], parameters['res'], parameters['res'], 3)
+
+    def args_to_dict(**kwargs):
+        return kwargs
+
+    generator_params = args_to_dict(batch_size=BATCH_SIZE, movie_dim=movie_dim, position_dim=position_dim,
+                                    n_classes=None, shuffle=True,
+                                    prep_data_per_batch=True, one_hot_labels=False,
+                                    res=parameters['res'],
+                                    n_samples=parameters['n_samples'],
+                                    mixed_state=True,
+                                    n_trajectories=parameters['trajectories_num'],
+                                    trajectory_list=0,
+                                    broadcast=parameters['broadcast'],
+                                    style=parameters['style'],
+                                    max_length=parameters['max_length'],
+                                    noise=parameters['noise'])
+    print('preparing generators')
+
+    # generator 2
+    train_generator_classifier = Syclopic_dataset_generator(trainX[:-5000], labels[:-5000],  one_random_sample=True, preprocess_fun=preprocess_fun, **generator_params)
+    # print(train_generator_classifier[0][0].shape)
+    # print(train_generator_classifier[0][0][0].std(), train_generator_classifier[0][0][0].mean())
+    # print(train_generator_classifier[0][0][1].std(), train_generator_classifier[0][0][1].mean())
+    #
+    # print(train_generator_classifier[0][0][0,0,:,:])
+    # error
+    val_generator_classifier = Syclopic_dataset_generator(trainX[-5000:].repeat(parameters['val_set_mult'], axis=0),
+                                                          labels[-5000:].repeat(parameters['val_set_mult'], axis=0),  one_random_sample=True, preprocess_fun=preprocess_fun,
+                                                          validation_mode=True, **generator_params)
+
+    test_generator_classifier = Syclopic_dataset_generator(testX, testY, retutn_x0_only=True,
+                                                          validation_mode=True, **generator_params)
+
+    lr_reducer = ReduceLROnPlateau(factor=np.sqrt(0.1), cooldown=0, patience=config['learning_patience'], min_lr=0.5e-6)
+    early_stopper = EarlyStopping(min_delta=0.001, patience=config['stopping_patience'])
+    history = model.fit(train_generator_classifier, epochs=parameters['epochs'], validation_data=val_generator_classifier,
+                         verbose=2,callbacks=[lr_reducer, early_stopper])
 
 
-    loss, accuracy = model.evaluate(test_dataset_x, test_dataset_y, batch_size=64)
-
-    train_dataset, test_dataset, seed_list = create_cifar_dataset(images, labels, res=res,
-                                                                  sample=parameters['sample'], return_datasets=True,
-                                                                  mixed_state=True,
-                                                                  add_seed=parameters['trajectories_num'],
-                                                                  trajectory_list=0,
-                                                                  broadcast=parameters['broadcast'],
-                                                                  style=parameters['style'],
-                                                                  max_length=parameters['max_length'],
-                                                                  noise=parameters['noise'],
-                                                                  )
-
-    opt_dict = {'sample': parameters['sample'], 'one_random_sample': False, 'return_x1_only': True}
-
-    test_dataset_x, test_dataset_y = split_dataset_xy(test_dataset, **opt_dict)
-    test_dataset_x = preprocess_image_input(255*test_dataset_x)
 
     ev1=[]
-    for ii,(x,y) in enumerate(zip(test_dataset_x, test_dataset_y)):
-        preds = model.predict(x)
-        ev1.append( np.argmax(preds.sum(axis=0))  == y)
-        if ii%100==0:
-            print('step {}, intermediate comitee accuracy: {}'.format(ii,np.mean(ev1)))
+    for bb in range(len(test_generator_classifier)):
+        for ii,x in enumerate(test_generator_classifier[bb][0]):
+            preds = model.predict(preprocess_fun(x))
+            y = test_generator_classifier[bb][1][ii]
+            # print(np.shape(x),np.shape(y))
+            # print(preds)
+            ev1.append( np.argmax(preds.sum(axis=0)) == y)
+            if ii%100==0:
+                print('step {}, intermediate comitee accuracy: {}'.format(ii,np.mean(ev1)))
 
         # ev2= == label
 
