@@ -31,7 +31,7 @@ import orram_style_nets
 lsbjob = os.getenv('LSB_JOBID')
 lsbjob = '' if lsbjob is None else lsbjob
 import cifar10_resnet50_lowResBaseline as cifar10_resnet50
-
+from dataset_utils import bad_res102
 parser = argparse.ArgumentParser()
 # parser.add_argument('--network_topology', default='default', type=str, help='default or v2')
 parser.add_argument('--network_topology', default='resnet50_on_imagenet', type=str, help='default or v2')
@@ -42,6 +42,7 @@ parser.add_argument('--resblocks16', default=3, type=int, help='resblocks')
 parser.add_argument('--resblocks8', default=3, type=int, help='resblocks')
 parser.add_argument('--epochs', default=200, type=int, help='epochs')
 parser.add_argument('--n_classes', default=100, type=int, help='epochs')
+parser.add_argument('--res', default=8, type=int, help='resolution, 0 for default')
 
 parser.add_argument('--last_layer_size', default=128, type=int, help='last_layer_size')
 parser.add_argument('--dropout1', default=0.2, type=float, help='dropout1')
@@ -64,6 +65,7 @@ parser.add_argument('--skip_conn16', dest='skip_conn16', action='store_true')
 parser.add_argument('--no-skip_conn16', dest='skip_conn16', action='store_false')
 parser.add_argument('--skip_conn8', dest='skip_conn8', action='store_true')
 parser.add_argument('--no-skip_conn8', dest='skip_conn8', action='store_false')
+
 
 parser.add_argument('--dense_interface', dest='dense_interface', action='store_true')
 parser.add_argument('--no-dense_interface', dest='dense_interface', action='store_false')
@@ -123,6 +125,10 @@ elif config['n_classes']==100:
 else:
     error
 
+if config['res']!=-1:
+    X_train = np.array([bad_res102(xx, (config['res'], config['res'])) for xx in X_train])
+    X_test = np.array([bad_res102(xx, (config['res'], config['res'])) for xx in X_test])
+
 # Convert class vectors to binary class matrices.
 # Y_train = np_utils.to_categorical(y_train, nb_classes)
 # Y_test = np_utils.to_categorical(y_test, nb_classes)
@@ -149,7 +155,9 @@ else:
 
 
 if config['network_topology'] == 'resnet50_on_imagenet':
-    model = cifar10_resnet50.define_compile_split_model(metrics=['sparse_categorical_accuracy'], n_classes=config['n_classes'])
+    model = cifar10_resnet50.define_compile_split_model(res=(config['res'] if config['res']!=-1 else 32),
+                                                        metrics=['sparse_categorical_accuracy'],
+                                                        n_classes=config['n_classes'])
     # model = orram_style_nets.parametric_net_befe_v2(dropout1=config['dropout1'],
     #                                                 dropout2=config['dropout2'],
     #                                                 resblocks16=config['resblocks16'],

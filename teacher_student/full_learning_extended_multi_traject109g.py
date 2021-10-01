@@ -138,6 +138,16 @@ parser.add_argument('--rotation_range', default=0.0, type=float, help='dropout1'
 parser.add_argument('--width_shift_range', default=0.1, type=float, help='dropout2')
 parser.add_argument('--height_shift_range', default=0.1, type=float, help='dropout2')
 
+##advanced trajectory parameters
+parser.add_argument('--time_sec', default=0.3, type=float, help='time for realistic trajectory')
+parser.add_argument('--traj_out_scale', default=4.0, type=float, help='scaling to match receptor size')
+
+parser.add_argument('--snellen', dest='snellen', action='store_true')
+parser.add_argument('--no-snellen', dest='snellen', action='store_false')
+
+parser.add_argument('--vm_kappa', default=0., type=float, help='factor for emulating sub and super diffusion')
+
+
 parser.set_defaults(data_augmentation=True,
                     layer_norm_res=True,
                     layer_norm_student=True,
@@ -150,7 +160,8 @@ parser.set_defaults(data_augmentation=True,
                     dense_interface=False,
                     resnet_mode=False,
                     skip_student_training=False,
-                    fine_tune_student=False)
+                    fine_tune_student=False,
+                    snellen=True)
 
 config = parser.parse_args()
 config = vars(config)
@@ -370,7 +381,8 @@ generator_params = args_to_dict(batch_size=BATCH_SIZE, movie_dim=movie_dim, posi
                                     broadcast=parameters['broadcast'],
                                     style = parameters['style'],
                                     max_length=parameters['max_length'],
-                                    noise = parameters['noise'])
+                                    noise = parameters['noise'],
+                                time_sec=parameters['time_sec'], traj_out_scale=parameters['traj_out_scale'],  snellen=parameters['snellen'],vm_kappa=parameters['vm_kappa'])
 print('preparing generators')
 # generator 1
 train_generator_features = Syclopic_dataset_generator(trainX[:-5000], None, teacher=fe_model, **generator_params)

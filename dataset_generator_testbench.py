@@ -62,16 +62,30 @@ parser.add_argument('--n_samples', default=5, type=int, help='sample')
 parser.add_argument('--res', default=8, type=int, help='resolution')
 parser.add_argument('--trajectories_num', default=-1, type=int, help='number of trajectories to use')
 parser.add_argument('--broadcast', default=1, type=int, help='1-integrate the coordinates by broadcasting them as extra dimentions, 2- add coordinates as an extra input')
-# parser.add_argument('--style', default='spiral_2dir', type=str, help='choose syclops style of motion')
+parser.add_argument('--style', default='spiral_2dir2', type=str, help='choose syclops style of motion')
 # parser.add_argument('--style', default='spiral', type=str, help='choose syclops style of motion')
-parser.add_argument('--style', default='degenerate_fix2', type=str, help='choose syclops style of motion')
+# parser.add_argument('--style', default='degenerate_fix2', type=str, help='choose syclops style of motion')
+# parser.add_argument('--style', default='xx1_intoy_rucci', type=str, help='choose syclops style of motion')
+# parser.add_argument('--style', default='xx1_vonmises_walk', type=str, help='choose syclops style of motion')
 # parser.add_argument('--style', default='ZigZag', type=str, help='choose syclops style of motion')
 # parser.add_argument('--style', default='const_p_noise', type=str, help='choose syclops style of motion')
 # parser.add_argument('--style', default='spiral_2dir_shfl', type=str, help='choose syclops style of motion')
 # parser.add_argument('--style', default='brownian', type=str, help='choose syclops style of motion')
 parser.add_argument('--noise', default=0.5, type=float, help='added noise to the const_p_noise style')
+
 parser.add_argument('--max_length', default=5, type=int, help='choose syclops max trajectory length')
 parser.add_argument('--val_set_mult', default=2, type=int, help='repetitions of validation dataset to reduce trajectory noise')
+
+##advanced trajectory parameters
+parser.add_argument('--time_sec', default=0.3, type=float, help='time for realistic trajectory')
+parser.add_argument('--traj_out_scale', default=4.0, type=float, help='scaling to match receptor size')
+
+parser.add_argument('--snellen', dest='snellen', action='store_true')
+parser.add_argument('--no-snellen', dest='snellen', action='store_false')
+
+parser.add_argument('--vm_kappa', default=None, type=float, help='factor for emulating sub and super diffusion')
+
+
 
 
 ### teacher network parameters
@@ -115,7 +129,8 @@ parser.add_argument('--rotation_range', default=0.0, type=float, help='dropout1'
 parser.add_argument('--width_shift_range', default=0.1, type=float, help='dropout2')
 parser.add_argument('--height_shift_range', default=0.1, type=float, help='dropout2')
 
-parser.set_defaults(data_augmentation=True,layer_norm_res=True,layer_norm_student=True,layer_norm_2=True,skip_conn=True,last_maxpool_en=True, testmode=False,dataset_center=True, dense_interface=False)
+parser.set_defaults(data_augmentation=True,layer_norm_res=True,layer_norm_student=True,layer_norm_2=True,skip_conn=True,last_maxpool_en=True, testmode=False,dataset_center=True, dense_interface=False,
+                    snellen=False)
 
 config = parser.parse_args()
 config = vars(config)
@@ -129,7 +144,7 @@ position_dim = (parameters['n_samples'],parameters['res'],parameters['res'],2) i
 def args_to_dict(**kwargs):
     return kwargs
 generator_params = args_to_dict(batch_size=BATCH_SIZE, movie_dim=(parameters['n_samples'],parameters['res'],parameters['res'],3), position_dim=position_dim, n_classes=None, shuffle=True,
-                 prep_data_per_batch=True,one_hot_labels=False, one_random_sample=False,
+                 prep_data_per_batch=True,one_hot_labels=False,
                                     res = parameters['res'],
                                     n_samples = parameters['n_samples'],
                                     mixed_state = True,
@@ -138,13 +153,20 @@ generator_params = args_to_dict(batch_size=BATCH_SIZE, movie_dim=(parameters['n_
                                     broadcast=parameters['broadcast'],
                                     style = parameters['style'],
                                     max_length=parameters['max_length'],
-                                    noise = parameters['noise'])
+                                    noise = parameters['noise'],
+                                    time_sec=parameters['time_sec'], traj_out_scale=parameters['traj_out_scale'],  snellen=parameters['snellen'],vm_kappa=parameters['vm_kappa']
+                                )
 train_generator = Syclopic_dataset_generator(images[:5000], labels[:5000], **generator_params)
 val_generator = Syclopic_dataset_generator(images[-5000:].repeat(parameters['val_set_mult'],axis=0), labels[-5000:].repeat(parameters['val_set_mult'],axis=0), validation_mode=True, **generator_params)
 
 train_generator_pic = Syclopic_dataset_generator(images[:5000], images[:5000,:8,:8,:]+1, **generator_params)
 val_generator_pic = Syclopic_dataset_generator(images[-5000:], images[-5000:,:8,:8,:]+1, validation_mode=True, **generator_params)
+#
+train_generator_rndsmpl = Syclopic_dataset_generator(images[:5000], labels[:5000], one_random_sample=True, **generator_params)
+val_generator_rndsmpl = Syclopic_dataset_generator(images[-5000:], labels[-5000:], one_random_sample=True, validation_mode=True, **generator_params)
 
+# train_generator_rndsmpl = Syclopic_dataset_generator(images[:5000], labels[:5000],**generator_params)
+# val_generator_rndsmpl = Syclopic_dataset_generator(images[-5000:], labels[-5000:],  one_random_sample=True, **generator_params)
 
 inputA = keras.layers.Input(shape=( parameters['n_samples'], parameters['res'],parameters['res'],3))
 # inputB = keras.layers.Input(shape=( parameters['n_samples'],parameters['res'],parameters['res'],2))
@@ -180,6 +202,20 @@ model2.compile(
 )
 model2.summary()
 
+input3 = keras.layers.Input(shape=(parameters['res'],parameters['res'],3))
+x = keras.layers.Flatten()(input3)
+x = keras.layers.Dense(10, activation="softmax",
+                       name='final')(x)
+model3 = keras.models.Model(inputs=[input3],outputs=x, name = 'student_3')
+opt=tf.keras.optimizers.Adam(lr=1e-3)
+model3.compile(
+    optimizer=opt,
+    loss="sparse_categorical_crossentropy",
+    metrics=["accuracy"],
+)
+model3.summary()
+
+
 # model.fit_generator(train_generator,  validation_data=val_generator, epochs=5, workers=8, use_multiprocessing=True)
 # ppp=model(val_generator[0])
 # print('---------')
@@ -204,6 +240,8 @@ model2.summary()
 #     model.evaluate(val_generator, workers=8, use_multiprocessing=True)
 #
 # model2.fit_generator(train_generator_pic,  validation_data=val_generator_pic, epochs=5, workers=8, use_multiprocessing=True)
+# model3.fit_generator(train_generator_rndsmpl,  validation_data=val_generator_rndsmpl, epochs=500, workers=8, use_multiprocessing=True)
+
 import matplotlib.pyplot as plt
 zz = []
 cc = 0

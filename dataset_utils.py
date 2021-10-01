@@ -21,7 +21,25 @@ import SYCLOP_env as syc
 
 import tensorflow as tf
 import tensorflow.keras as keras
+from drift_intoy_and_rucci20 import gen_drift_traj_condition
 
+import numpy as np
+
+
+def vonmises_walk(vm_bias=np.sqrt(2.), vm_amp=1., kappa=0, n_steps=5, enforce_origin=True):
+    phi0 = 2 * np.pi * np.random.uniform()
+    flip = 0
+    if kappa < 0:
+        kappa = -kappa
+        flip = np.pi
+    dphi = flip + np.random.vonmises(0, kappa, size=n_steps)
+    dr = vm_bias + vm_amp * np.abs(np.random.normal(size=n_steps))
+    if enforce_origin:
+        dr[0] = 0
+    phi = phi0 + np.cumsum(dphi)
+    dxy = dr * np.array([np.cos(phi), np.sin(phi)])
+    xy = np.cumsum(dxy.T, axis=0)
+    return xy
 
 
 def test_num_of_trajectories(gen,batch_size=32):
@@ -46,85 +64,100 @@ def bad_res102(img,res):
     dwnsmp=cv2.resize(img,res, interpolation = cv2.INTER_CUBIC)
     return dwnsmp
 
-def create_trajectory(starting_point, n_samples = 5, style = 'brownian', noise = 0.15):
-    steps = []
+def create_trajectory(starting_point, n_samples = 5, style = 'brownian', noise = 0.15, time_sec=0.3, traj_out_scale=None,  snellen=True, vm_kappa=0):
+    if style[:3] == 'xx1':
+        if style == 'xx1_intoy_rucci':
+            _, steps = gen_drift_traj_condition(duration=time_sec, N=n_samples, snellen=snellen)
+            steps = starting_point+traj_out_scale*steps.transpose()
+        if style == 'xx1_vonmises_walk':
+            steps = vonmises_walk(n_steps=n_samples, kappa=vm_kappa)
+            steps += starting_point
+    else:
+        steps = []
 
-    phi = np.random.randint(0.1,2*np.pi) #the angle in polar coordinates
-    if style == 'degenerate_fix2':
-        phi = np.random.random()*2*np.pi #(0.1, 2 * np.pi)  # the angle in polar coordinates
-        style = 'degenerate_fix'
+        phi = np.random.randint(0.1,2*np.pi) #the angle in polar coordinates
 
-    speed = 0.8#np.abs(0.5 + np.random.normal(0,0.5))         #Constant added to the radios
-    r = 3
-    name_list = ['const direction + noise','ZigZag','spiral', 'brownian','degenerate']
-    speed_noise = speed * 0.2
-    phi_noise = 0.05
-    x, y = starting_point[1], starting_point[0]
-    steps.append([y,x])
-    phi_speed =  (1/8)*np.pi
-    old_style = style
-    for j in range(n_samples-1):
-        style = old_style
-        if style == 'mix':
-            old_style = 'mix'
-            style = random.sample(name_list, 1)
-        if style == 'const_p_noise':
-            r += speed + np.random.normal(-0.5,speed_noise)
-            phi_noise = noise
-            phi_speed = np.random.normal(0,phi_noise)
-            phi += phi_speed
-        elif style == 'ZigZag':
-            r += speed + np.random.normal(-0.5,speed_noise)
-            phi_noise = 0.005
-            phi_speed *=  -1
-            phi += phi_speed + np.random.normal(0,phi_noise)
-        elif style == 'spiral':
-            r += speed / 2 + np.random.normal(-0.5, speed_noise)
-            phi_noise = 0.1
-            phi_speed = np.random.normal((2 / 4) * np.pi, (1 / 8) * np.pi)
-            factor = 1  # np.random.choice([-1,1])
-            phi += factor * phi_speed
-        elif style == 'spiral_2dir' or style == 'spiral_2dir_shfl':
-            r += speed / 2 + np.random.normal(-0.5, speed_noise)
-            phi_noise = 0.1
-            phi_speed = np.random.normal((2 / 4) * np.pi, (1 / 8) * np.pi)
-            if j==0:
-                factor = np.random.choice([-1,1])
-            phi += factor * phi_speed
-        elif style == 'big_steps':
-            r += speed/2 + np.random.normal(-0.5,speed_noise)
-            phi_noise = 0.1
-            phi_speed = np.random.normal((2/4)*np.pi,(1/8)*np.pi)
-            factor = np.random.choice([-1,1])
-            phi += factor * phi_speed
-        elif style == 'brownian':
-            r += speed/2 + np.random.normal(-0.5,speed_noise)
-            phi = np.random.randint(0.1,2*np.pi)
-        elif style == 'degenerate' or style == 'degenerate_fix':
-            r += speed + np.random.normal(-0.5,speed_noise)
+        ##bug fixes
+        if style == 'degenerate_fix2':
+            phi = np.random.random()*2*np.pi #(0.1, 2 * np.pi)  # the angle in polar coordinates
+            style = 'degenerate_fix'
 
-        elif style == 'old':
-            
-            starting_point += np.random.randint(-2,3,2) 
-            r = 0
-            phi = 0
-        else:
-            error
+        if style == 'spiral_2dir2':
+            phi = np.random.random() * 2 * np.pi  # (0.1, 2 * np.pi)  # the angle in polar coordinates
+            style = 'spiral_2dir'
+        ## end bug fixes
 
-        x, y = starting_point[1] + int(r * np.cos(phi)), starting_point[0]+int(r * np.sin(phi))
-        if style == 'degenerate_fix':
-            while abs(steps[-1][0]-y)<1e-6 and abs(steps[-1][1]-x)<1e-6:
-                r += 0.5
-                x, y = starting_point[1] + int(r * np.cos(phi)), starting_point[0] + int(r * np.sin(phi))
-
+        speed = 0.8#np.abs(0.5 + np.random.normal(0,0.5))         #Constant added to the radios
+        r = 3
+        name_list = ['const direction + noise','ZigZag','spiral', 'brownian','degenerate']
+        speed_noise = speed * 0.2
+        phi_noise = 0.05
+        x, y = starting_point[1], starting_point[0]
         steps.append([y,x])
+        phi_speed =  (1/8)*np.pi
+        old_style = style
+        for j in range(n_samples-1):
+            style = old_style
+            if style == 'mix':
+                old_style = 'mix'
+                style = random.sample(name_list, 1)
+            if style == 'const_p_noise':
+                r += speed + np.random.normal(-0.5,speed_noise)
+                phi_noise = noise
+                phi_speed = np.random.normal(0,phi_noise)
+                phi += phi_speed
+            elif style == 'ZigZag':
+                r += speed + np.random.normal(-0.5,speed_noise)
+                phi_noise = 0.005
+                phi_speed *=  -1
+                phi += phi_speed + np.random.normal(0,phi_noise)
+            elif style == 'spiral':
+                r += speed / 2 + np.random.normal(-0.5, speed_noise)
+                phi_noise = 0.1
+                phi_speed = np.random.normal((2 / 4) * np.pi, (1 / 8) * np.pi)
+                factor = 1  # np.random.choice([-1,1])
+                phi += factor * phi_speed
+            elif style == 'spiral_2dir' or style == 'spiral_2dir_shfl':
+                r += speed / 2 + np.random.normal(-0.5, speed_noise)
+                phi_noise = 0.1
+                phi_speed = np.random.normal((2 / 4) * np.pi, (1 / 8) * np.pi)
+                if j==0:
+                    factor = np.random.choice([-1,1])
+                phi += factor * phi_speed
+            elif style == 'big_steps':
+                r += speed/2 + np.random.normal(-0.5,speed_noise)
+                phi_noise = 0.1
+                phi_speed = np.random.normal((2/4)*np.pi,(1/8)*np.pi)
+                factor = np.random.choice([-1,1])
+                phi += factor * phi_speed
+            elif style == 'brownian':
+                r += speed/2 + np.random.normal(-0.5,speed_noise)
+                phi = np.random.randint(0.1,2*np.pi)
+            elif style == 'degenerate' or style == 'degenerate_fix':
+                r += speed + np.random.normal(-0.5,speed_noise)
 
-        #shuffling all the trajectory except for the firs point if appropriate flag on
-        if style == 'spiral_shfl' or style == 'spiral_2dir_shfl':
-            step0 = steps[0]
-            steps_ = steps[1:]
-            random.shuffle(steps_)
-            steps = [step0] + steps_
+            elif style == 'old':
+
+                starting_point += np.random.randint(-2,3,2)
+                r = 0
+                phi = 0
+            else:
+                error
+
+            x, y = starting_point[1] + int(r * np.cos(phi)), starting_point[0]+int(r * np.sin(phi))
+            if style == 'degenerate_fix':
+                while abs(steps[-1][0]-y)<1e-6 and abs(steps[-1][1]-x)<1e-6:
+                    r += 0.5
+                    x, y = starting_point[1] + int(r * np.cos(phi)), starting_point[0] + int(r * np.sin(phi))
+
+            steps.append([y,x])
+
+            #shuffling all the trajectory except for the firs point if appropriate flag on
+            if style == 'spiral_shfl' or style == 'spiral_2dir_shfl':
+                step0 = steps[0]
+                steps_ = steps[1:]
+                random.shuffle(steps_)
+                steps = [step0] + steps_
 
     return steps
 
@@ -159,7 +192,7 @@ def generate_syclopic_images(images, res, n_samples = 5, mixed_state = True, add
             steps = create_trajectory(starting_point= starting_point,
                                       n_samples = n_samples,
                                       style = style,
-                                       noise = noise)
+                                       noise = noise,**kwargs)
 
             if mixed_state and n_trajectories!= -1:
                 seed_list.append(new_seed)
@@ -216,7 +249,7 @@ def generate_syclopic_images(images, res, n_samples = 5, mixed_state = True, add
             steps = create_trajectory(starting_point= starting_point,
                                       n_samples = n_samples,
                                       style = style,
-                                       noise = noise)
+                                       noise = noise,**kwargs)
             q_sequence = np.array(steps).astype(int)
         else:
             q_sequence = extended_trajectory_builder()
@@ -267,8 +300,8 @@ def generate_syclopic_images(images, res, n_samples = 5, mixed_state = True, add
 class Syclopic_dataset_generator(keras.utils.Sequence):
     'Generates data for Keras'
     def __init__(self, images, labels, batch_size=None, movie_dim=None, position_dim=None,
-                 n_classes=None, shuffle=True, syclopic_function=generate_syclopic_images,
-                 prep_data_per_batch=False,one_hot_labels=False, one_random_sample=False, validation_mode=False, loud_en=False, teacher=None, **kwargs):
+                 n_classes=None, shuffle=True, syclopic_function=generate_syclopic_images, retutn_x0_only=False,
+                 prep_data_per_batch=False,one_hot_labels=False, one_random_sample=False, validation_mode=False, loud_en=False, teacher=None, preprocess_fun=lambda x:x, augmenter=None, **kwargs):
         list_IDs = list(range(len(images)))
         'Initialization'
         self.images=images
@@ -287,6 +320,8 @@ class Syclopic_dataset_generator(keras.utils.Sequence):
         self.validation_mode = validation_mode
         self.loud_en = loud_en
         self.teacher = teacher
+        self.preprocess_fun = preprocess_fun
+        self.retutn_x0_only = retutn_x0_only
         if validation_mode:
             self.prep_data_per_batch = False
             if prep_data_per_batch:
@@ -345,6 +380,7 @@ class Syclopic_dataset_generator(keras.utils.Sequence):
             if self.teacher is None:
                 y = self.labels[list_IDs_temp]
             X=(X1,X2)
+        X = (self.preprocess_fun(X[0]), X[1])
 
         if self.teacher is None:
             y = keras.utils.to_categorical(y, num_classes=self.n_classes) if self.one_hot_labels else y
@@ -354,9 +390,12 @@ class Syclopic_dataset_generator(keras.utils.Sequence):
         if self.one_random_sample:  # returning  one random sample from each sequence (used in baseline tests)
             data_len = np.shape(X[0])[0]
             indx = list(range(data_len))
-            pick_sample = np.random.randint(n_samples, size=data_len)
+            pick_sample = np.random.randint(self.kwargs['n_samples'], size=data_len)
             return X[0][indx,pick_sample,...], y
         else:
-            return X, y
+            if self.retutn_x0_only:
+                return X[0],y
+            else:
+                return X, y
 
 
