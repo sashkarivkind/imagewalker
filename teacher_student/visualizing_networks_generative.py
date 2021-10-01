@@ -284,15 +284,21 @@ import matplotlib.pyplot as plt
 img_width = 32
 img_height = 32
 loss_list = []
-for i in range(1):
+img_stash = {}
+all_imgs = []
+for i in range(64):
+    print('################', i, '##############')
     generator = define_generator()
     optimizer = tf.keras.optimizers.Adam(lr=1e-3)
-    loss, img = visualize_filter(13)
+    loss, img = visualize_filter(i)
+    img_stash[i] = img
+    all_imgs.append(img)
     loss_list.append(np.array(loss))
     plt.figure()
     plt.imshow(img)
-    plt.title(13)
+    plt.title(i)
 
+pickle.dump(img_stash,open('teacher_features','wb'))
 #keras.preprocessing.image.save_img("0.png", img)
 
 #display(Image("0.png"))
