@@ -25,6 +25,12 @@ from drift_intoy_and_rucci20 import gen_drift_traj_condition
 
 import numpy as np
 
+def build_cifar_padded(image,pad_size = 100, xx=132,yy=132,y_size=32,x_size=32,offset=(0,0)):
+    #todo: double-check x-y vs. row-column convention
+    #prepares an mnist image padded with zeros everywhere around it, written in a somewhat strange way to resuse other availiable functions
+    
+    image = cv2.copyMakeBorder( image, pad_size, pad_size, pad_size, pad_size, cv2.BORDER_CONSTANT)
+    return image
 
 def vonmises_walk(vm_bias=np.sqrt(2.), vm_amp=1., kappa=0, n_steps=5, enforce_origin=True):
     phi0 = 2 * np.pi * np.random.uniform()
@@ -219,9 +225,9 @@ def generate_syclopic_images(images, res, n_samples = 5, mixed_state = True, add
     if mixed_state and n_trajectories!= -1 :
         np.random.seed(42)
         new_seed = 42
-
+        
     #initiating syclop instance for generating sequences of images
-    img = misc.build_cifar_padded(1. / 256 * images[0])
+    img = build_cifar_padded(1. / 256 * images[0])
     scene = syc.Scene(image_matrix=img)
     if up_sample:
         sensor = syc.Sensor(winx=56, winy=56, centralwinx=32, centralwiny=32, nchannels=3,
@@ -241,7 +247,7 @@ def generate_syclopic_images(images, res, n_samples = 5, mixed_state = True, add
             print('Are we Random?? ', np.random.randint(1, 20))
 
         #Set the padded image
-        img=misc.build_cifar_padded(1./256*img)
+        img=build_cifar_padded(1./256*img)
         img_size = img.shape
 
         if n_trajectories == -1:

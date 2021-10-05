@@ -203,6 +203,7 @@ def load_student(path = '/home/orram/Documents/GitHub/imagewalker/teacher_studen
     layer_index = 0
     for layer in numpy_student.layers:
         if layer.name[:-2] == 'convLSTM':
+            print(layer.name)
             layer_name = layer.name
             saved_weights = [np_weights[layer_index], np_weights[layer_index+ 1], np_weights[layer_index+ 2]]
             numpy_student.get_layer(layer_name).set_weights(saved_weights)

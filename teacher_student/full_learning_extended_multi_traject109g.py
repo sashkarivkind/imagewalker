@@ -1,31 +1,19 @@
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
-"""
-added the explore relations part after 735561
-"""
+
 
 import os 
 import sys
 import gc
 sys.path.insert(1, os.getcwd()+'/..')
-sys.path.insert(1, os.getcwd()+'/../keras-resnet/')
-# sys.path.insert(1, '/home/labs/ahissarlab/arivkind/imagewalker')
 
-# sys.path.insert(1, '/home/labs/ahissarlab/orra/imagewalker')
-# sys.path.insert(1, '/home/orram/Documents/GitHub/imagewalker')
-import random
 import numpy as np
 import tensorflow as tf
 from tensorflow import keras
 from tensorflow.keras.datasets import cifar10, cifar100
-import matplotlib.pyplot as plt
-import scipy.stats as stats
-import pandas as pd
+
 import time
 import pickle
 import argparse
-from feature_learning_utils import  student3,student4,student5,  write_to_file, traject_learning_dataset_update,  net_weights_reinitializer, load_student
-from keras_utils import create_cifar_dataset, split_dataset_xy
+from feature_learning_utils import  student3, traject_learning_dataset_update
 from dataset_utils import Syclopic_dataset_generator, test_num_of_trajectories
 import cifar10_resnet50_lowResBaseline as cifar10_resnet50
 print(os.getcwd() + '/')
@@ -46,7 +34,7 @@ parser.add_argument('--no-testmode', dest='testmode', action='store_false')
 ### student parameters
 parser.add_argument('--epochs', default=1, type=int, help='num training epochs')
 parser.add_argument('--int_epochs', default=1, type=int, help='num internal training epochs')
-parser.add_argument('--decoder_epochs', default=40, type=int, help='num internal training epochs')
+parser.add_argument('--decoder_epochs', default=1, type=int, help='num internal training epochs')
 parser.add_argument('--num_feature', default=64, type=int, help='legacy to be discarded')
 parser.add_argument('--rnn_layer1', default=32, type=int, help='legacy to be discarded')
 parser.add_argument('--rnn_layer2', default=64, type=int, help='legacy to be discarded')
@@ -62,7 +50,7 @@ parser.add_argument('--dropout', default=0.2, type=float, help='dropout1')
 parser.add_argument('--rnn_dropout', default=0.0, type=float, help='dropout1')
 parser.add_argument('--pretrained_student_path', default=None, type=str, help='pretrained student, works only with student3')
 
-parser.add_argument('--decoder_optimizer', default='Adam', type=str, help='Adam or SGD')
+parser.add_argument('--decoder_optimizer', default='SGD', type=str, help='Adam or SGD')
 
 parser.add_argument('--skip_student_training', dest='skip_student_training', action='store_true')
 parser.add_argument('--no-skip_student_training', dest='skip_student_training', action='store_false')
@@ -85,14 +73,14 @@ parser.add_argument('--n_samples', default=5, type=int, help='n_samples')
 parser.add_argument('--res', default=8, type=int, help='resolution')
 parser.add_argument('--trajectories_num', default=10, type=int, help='number of trajectories to use')
 parser.add_argument('--broadcast', default=0, type=int, help='1-integrate the coordinates by broadcasting them as extra dimentions, 2- add coordinates as an extra input')
-parser.add_argument('--style', default='brownain', type=str, help='choose syclops style of motion')
+parser.add_argument('--style', default='spiral_2dir2', type=str, help='choose syclops style of motion')
 parser.add_argument('--loss', default='mean_squared_error', type=str, help='loss type for student')
 parser.add_argument('--noise', default=0.15, type=float, help='added noise to the const_p_noise style')
 parser.add_argument('--max_length', default=5, type=int, help='choose syclops max trajectory length')
 
 
 ### teacher network parameters
-parser.add_argument('--teacher_net', default='/home/orram/Documents/GitHub/imagewalker/teacher_student/model_510046__1628691784.hdf', type=str, help='path to pretrained teacher net')
+parser.add_argument('--teacher_net', default='', type=str, help='path to pretrained teacher net')
 
 parser.add_argument('--resblocks', default=3, type=int, help='resblocks')
 parser.add_argument('--student_version', default=3, type=int, help='student version')
@@ -333,10 +321,6 @@ if True:
 
 if parameters['student_version']==3:
     student_fun = student3
-elif parameters['student_version'] == 4:
-    student_fun = student4
-elif parameters['student_version'] == 5:
-    student_fun = student5
 else:
     error
 

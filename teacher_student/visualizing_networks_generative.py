@@ -151,6 +151,7 @@ trainX, testX = prep_pixels(trainX, testX)
 path = os.getcwd() + '/'
 
 teacher = keras.models.load_model(parameters['teacher_net'])
+#teacher = keras.models.load_model('/home/orram/Documents/GitHub/imagewalker/keras-resnet/model_52191__1631198121.hdf')
 #teacher.evaluate(trainX[45000:], trainY[45000:], verbose=2)
 
 
@@ -247,7 +248,7 @@ def gradient_ascent_step(latent_starter, filter_index, learning_rate):
 
 def visualize_filter(filter_index, use_img = False):
     # We run gradient ascent for 20 steps
-    iterations = 150
+    iterations = 60
     learning_rate = 10.0
     loss_list = []
     latent_starter = tf.random.uniform([1,100])
@@ -308,6 +309,8 @@ pickle.dump(img_stash,open('teacher_features','wb'))
 all_imgs = []
 for filter_index in range(64):
     print("Processing filter %d" % (filter_index,))
+    generator = define_generator()
+    optimizer = tf.keras.optimizers.Adam(lr=1e-3)
     loss, img = visualize_filter(filter_index, use_img=True)
     all_imgs.append(img)
 #%%
