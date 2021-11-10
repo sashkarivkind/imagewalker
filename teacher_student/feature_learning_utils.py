@@ -203,12 +203,13 @@ def load_student(path = '/home/orram/Documents/GitHub/imagewalker/teacher_studen
     layer_index = 0
     for layer in numpy_student.layers:
         if layer.name[:-2] == 'convLSTM':
+            print(layer.name)
             layer_name = layer.name
             saved_weights = [np_weights[layer_index], np_weights[layer_index+ 1], np_weights[layer_index+ 2]]
             numpy_student.get_layer(layer_name).set_weights(saved_weights)
             layer_index += 3
-            
-    return numpy_student, parameters
+    decoder = keras.models.load_model(home_folder + 'decoder_trained_model')
+    return numpy_student, parameters, decoder
 
 def student3(sample = 10, res = 8, activation = 'tanh', dropout = 0.0, rnn_dropout = 0.0, upsample = 0,
              num_feature = 1, layer_norm = False ,batch_norm = False, n_layers=3, conv_rnn_type='lstm',block_size = 1,
