@@ -44,6 +44,8 @@ parser.add_argument('--run_name_prefix', default='noname', type=str, help='path 
 parser.add_argument('--run_index', default=10, type=int, help='run_index')
 parser.add_argument('--verbose', default=2, type=int, help='run_index')
 
+parser.add_argument('--n_classes', default=10, type=int, help='classes')
+
 parser.add_argument('--testmode', dest='testmode', action='store_true')
 parser.add_argument('--no-testmode', dest='testmode', action='store_false')
 
@@ -64,10 +66,24 @@ parser.add_argument('--conv_rnn_type', default='lstm', type=str, help='conv_rnn_
 parser.add_argument('--student_nl', default='relu', type=str, help='non linearity')
 parser.add_argument('--dropout', default=0.2, type=float, help='dropout1')
 parser.add_argument('--rnn_dropout', default=0.0, type=float, help='dropout1')
-conv_rnn_type='lstm'
+parser.add_argument('--pretrained_student_path', default=None, type=str, help='pretrained student, works only with student3')
+parser.add_argument('--pos_det', default='saved_models/noname_j_t1636361191_feature/pd_model.hdf', type=str, help='positoin detector model')
+
+parser.add_argument('--decoder_optimizer', default='Adam', type=str, help='Adam or SGD')
+
+parser.add_argument('--skip_student_training', dest='skip_student_training', action='store_true')
+parser.add_argument('--no-skip_student_training', dest='skip_student_training', action='store_false')
+
+parser.add_argument('--fine_tune_student', dest='fine_tune_student', action='store_true')
+parser.add_argument('--no-fine_tune_student', dest='fine_tune_student', action='store_false')
 
 parser.add_argument('--layer_norm_student', dest='layer_norm_student', action='store_true')
 parser.add_argument('--no-layer_norm_student', dest='layer_norm_student', action='store_false')
+
+parser.add_argument('--batch_norm_student', dest='batch_norm_student', action='store_true')
+parser.add_argument('--no-batch_norm_student', dest='batch_norm_student', action='store_false')
+
+parser.add_argument('--val_set_mult', default=5, type=int, help='repetitions of validation dataset to reduce trajectory noise')
 
 
 ### syclop parameters
@@ -75,7 +91,7 @@ parser.add_argument('--trajectory_index', default=0, type=int, help='trajectory 
 parser.add_argument('--n_samples', default=5, type=int, help='n_samples')
 parser.add_argument('--res', default=8, type=int, help='resolution')
 parser.add_argument('--trajectories_num', default=10, type=int, help='number of trajectories to use')
-parser.add_argument('--broadcast', default=0, type=int, help='1-integrate the coordinates by broadcasting them as extra dimentions, 2- add coordinates as an extra input')
+parser.add_argument('--broadcast', default=1, type=int, help='1-integrate the coordinates by broadcasting them as extra dimentions, 2- add coordinates as an extra input')
 parser.add_argument('--style', default='brownain', type=str, help='choose syclops style of motion')
 parser.add_argument('--loss', default='mean_squared_error', type=str, help='loss type for student')
 parser.add_argument('--noise', default=0.15, type=float, help='added noise to the const_p_noise style')
@@ -129,16 +145,31 @@ parser.add_argument('--rotation_range', default=0.0, type=float, help='dropout1'
 parser.add_argument('--width_shift_range', default=0.1, type=float, help='dropout2')
 parser.add_argument('--height_shift_range', default=0.1, type=float, help='dropout2')
 
+##advanced trajectory parameters
+parser.add_argument('--time_sec', default=0.3, type=float, help='time for realistic trajectory')
+parser.add_argument('--traj_out_scale', default=4.0, type=float, help='scaling to match receptor size')
+
+parser.add_argument('--snellen', dest='snellen', action='store_true')
+parser.add_argument('--no-snellen', dest='snellen', action='store_false')
+
+parser.add_argument('--vm_kappa', default=0., type=float, help='factor for emulating sub and super diffusion')
+
+
 parser.set_defaults(data_augmentation=True,
                     layer_norm_res=True,
                     layer_norm_student=True,
+                    batch_norm_student=False,
                     layer_norm_2=True,
                     skip_conn=True,
                     last_maxpool_en=True,
                     testmode=False,
                     dataset_center=True,
                     dense_interface=False,
-                    resnet_mode=True)
+                    resnet_mode=False,
+                    skip_student_training=False,
+                    fine_tune_student=False,
+                    snellen=True)
+
 
 config = parser.parse_args()
 config = vars(config)
@@ -319,16 +350,19 @@ student = student_fun(sample = parameters['max_length'],
                    rnn_layer1 = parameters['rnn_layer1'],
                    rnn_layer2 = parameters['rnn_layer2'],
                    layer_norm = parameters['layer_norm_student'],
+                   batch_norm = parameters['batch_norm_student'],
                    conv_rnn_type = parameters['conv_rnn_type'],
                    block_size = parameters['student_block_size'],
                    add_coordinates = parameters['broadcast'],
                    time_pool = parameters['time_pool'],
                    dense_interface=parameters['dense_interface'],
                     loss=parameters['loss'],
-                      upsample=parameters['upsample'])
+                      upsample=parameters['upsample'],
+                      pos_det=parameters['pos_det'],
+                      )
 
 print('successfully - initialized student')
-
+student.summary()
 train_accur = []
 test_accur = []
 # generator parameters:

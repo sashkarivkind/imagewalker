@@ -34,7 +34,7 @@ import cifar10_resnet50_lowResBaseline as cifar10_resnet50
 from dataset_utils import bad_res102
 parser = argparse.ArgumentParser()
 # parser.add_argument('--network_topology', default='default', type=str, help='default or v2')
-parser.add_argument('--network_topology', default='resnet50_on_imagenet', type=str, help='default or v2')
+parser.add_argument('--network_topology', default='default', type=str, help='default or v2')
 
 
 parser.add_argument('--resblocks', default=3, type=int, help='resblocks')
@@ -42,7 +42,7 @@ parser.add_argument('--resblocks16', default=3, type=int, help='resblocks')
 parser.add_argument('--resblocks8', default=3, type=int, help='resblocks')
 parser.add_argument('--epochs', default=200, type=int, help='epochs')
 parser.add_argument('--n_classes', default=100, type=int, help='epochs')
-parser.add_argument('--res', default=8, type=int, help='resolution, 0 for default')
+parser.add_argument('--res', default=-1, type=int, help='resolution, 0 for default')
 
 parser.add_argument('--last_layer_size', default=128, type=int, help='last_layer_size')
 parser.add_argument('--dropout1', default=0.2, type=float, help='dropout1')
@@ -146,12 +146,15 @@ X_train = X_train[:-validate_at_last].astype('float32')
 if  config['network_topology'] == 'resnet50_on_imagenet':
     X_train = cifar10_resnet50.preprocess_image_input(X_train)
     X_val = cifar10_resnet50.preprocess_image_input(X_val)
+    X_test = cifar10_resnet50.preprocess_image_input(X_test)
 else:
     mean_image = np.mean(X_train, axis=0)
     X_train -= mean_image
     X_val -= mean_image
+    X_test  -= mean_image
     X_train /= config['dataset_norm']
     X_val /= config['dataset_norm']
+    X_test /= config['dataset_norm']
 
 
 if config['network_topology'] == 'resnet50_on_imagenet':
@@ -239,3 +242,6 @@ else:
                         callbacks=[lr_reducer, early_stopper, csv_logger])
 
 model.save('model_{}.hdf'.format(this_run_suffix))
+
+print('evaluating on the test dataset:')
+teacher.evaluate(X_test, Y_test, verbose=2)

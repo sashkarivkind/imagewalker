@@ -23,7 +23,7 @@ import pickle
 import argparse
 # from feature_learning_utils import  student3,  write_to_file, traject_learning_dataset_update,  net_weights_reinitializer
 from keras_utils import create_cifar_dataset, split_dataset_xy
-from dataset_utils import Syclopic_dataset_generator
+from dataset_utils import Syclopic_dataset_generator, test_num_of_trajectories
 print(os.getcwd() + '/')
 #%%
 
@@ -83,7 +83,7 @@ parser.add_argument('--traj_out_scale', default=4.0, type=float, help='scaling t
 parser.add_argument('--snellen', dest='snellen', action='store_true')
 parser.add_argument('--no-snellen', dest='snellen', action='store_false')
 
-parser.add_argument('--vm_kappa', default=None, type=float, help='factor for emulating sub and super diffusion')
+parser.add_argument('--vm_kappa', default=-20., type=float, help='factor for emulating sub and super diffusion')
 
 
 
@@ -156,7 +156,7 @@ generator_params = args_to_dict(batch_size=BATCH_SIZE, movie_dim=(parameters['n_
                                     noise = parameters['noise'],
                                     time_sec=parameters['time_sec'], traj_out_scale=parameters['traj_out_scale'],  snellen=parameters['snellen'],vm_kappa=parameters['vm_kappa']
                                 )
-train_generator = Syclopic_dataset_generator(images[:5000], labels[:5000], **generator_params)
+train_generator = Syclopic_dataset_generator(images[:-5000], labels[:-5000], **generator_params)
 val_generator = Syclopic_dataset_generator(images[-5000:].repeat(parameters['val_set_mult'],axis=0), labels[-5000:].repeat(parameters['val_set_mult'],axis=0), validation_mode=True, **generator_params)
 
 train_generator_pic = Syclopic_dataset_generator(images[:5000], images[:5000,:8,:8,:]+1, **generator_params)
@@ -164,7 +164,6 @@ val_generator_pic = Syclopic_dataset_generator(images[-5000:], images[-5000:,:8,
 #
 train_generator_rndsmpl = Syclopic_dataset_generator(images[:5000], labels[:5000], one_random_sample=True, **generator_params)
 val_generator_rndsmpl = Syclopic_dataset_generator(images[-5000:], labels[-5000:], one_random_sample=True, validation_mode=True, **generator_params)
-
 # train_generator_rndsmpl = Syclopic_dataset_generator(images[:5000], labels[:5000],**generator_params)
 # val_generator_rndsmpl = Syclopic_dataset_generator(images[-5000:], labels[-5000:],  one_random_sample=True, **generator_params)
 
@@ -229,6 +228,7 @@ model3.summary()
 #     return len(set(zz)), cc
 # print('---------')
 # print('-------- total trajectories {}, out of tries: {}'.format( *test_num_of_trajectories(val_generator)))
+# print('-------- total trajectories {}, out of tries: {}'.format( *test_num_of_trajectories(train_generator)))
 
 # print('prediction shape',ppp.shape )
 # print('val_generator len',len(val_generator))
@@ -240,17 +240,19 @@ model3.summary()
 #     model.evaluate(val_generator, workers=8, use_multiprocessing=True)
 #
 # model2.fit_generator(train_generator_pic,  validation_data=val_generator_pic, epochs=5, workers=8, use_multiprocessing=True)
-# model3.fit_generator(train_generator_rndsmpl,  validation_data=val_generator_rndsmpl, epochs=500, workers=8, use_multiprocessing=True)
+model3.fit_generator(train_generator_rndsmpl,  validation_data=val_generator_rndsmpl, epochs=0, workers=8, use_multiprocessing=True)
 
-import matplotlib.pyplot as plt
-zz = []
-cc = 0
-plt.figure()
-for uu in range(3):
-    for bb in range(3):
-        traj=val_generator[uu][0][1][bb, :, 0, 0, :]
-        cc += 1
-        plt.subplot(3,3,bb*3+uu+1)
-        plt.plot(traj[:,0],traj[:,1],'-o')
-        plt.title(parameters['style'])
-plt.show()
+print(val_generator_rndsmpl[0][0])
+
+# import matplotlib.pyplot as plt
+# zz = []
+# cc = 0
+# plt.figure()
+# for uu in range(3):
+#     for bb in range(3):
+#         traj=val_generator[uu][0][1][bb, :, 0, 0, :]
+#         cc += 1
+#         plt.subplot(3,3,bb*3+uu+1)
+#         plt.plot(traj[:,0],traj[:,1],'-o')
+#         plt.title(parameters['style'])
+# plt.show()

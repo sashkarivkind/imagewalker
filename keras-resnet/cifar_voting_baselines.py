@@ -149,14 +149,14 @@ if __name__ == "__main__":
     parser.add_argument('--res', default=8, type=int, help='resolution')
     parser.add_argument('--n_classes', default=10, type=int, help='epochs')
 
-    parser.add_argument('--epochs', default=100, type=int, help='num training epochs')
-    parser.add_argument('--n_samples', default=5, type=int, help='num of samplese per trajectory')
+    parser.add_argument('--epochs', default=0, type=int, help='num training epochs')
+    parser.add_argument('--n_samples', default=10, type=int, help='num of samplese per trajectory')
     parser.add_argument('--trajectories_num', default=-1, type=int, help='number of trajectories to use')
     parser.add_argument('--broadcast', default=0, type=int,
                         help='1-integrate the coordinates by broadcasting them as extra dimentions, 2- add coordinates as an extra input')
     parser.add_argument('--style', default='brownian', type=str, help='choose syclops style of motion')
     parser.add_argument('--noise', default=0.15, type=float, help='added noise to the const_p_noise style')
-    parser.add_argument('--max_length', default=1, type=int, help='choose syclops max trajectory length')
+    parser.add_argument('--max_length', default=5, type=int, help='choose syclops max trajectory length')
     parser.add_argument('--val_set_mult', default=5, type=int,
                         help='repetitions of validation dataset to reduce trajectory noise')
 
@@ -243,6 +243,7 @@ if __name__ == "__main__":
 
 
     ev1=[]
+    ev2=[]
     for bb in range(len(test_generator_classifier)):
         for ii,x in enumerate(test_generator_classifier[bb][0]):
             preds = model.predict(preprocess_fun(x))
@@ -250,10 +251,13 @@ if __name__ == "__main__":
             # print(np.shape(x),np.shape(y))
             # print(preds)
             ev1.append( np.argmax(preds.sum(axis=0)) == y)
+            ev2.append( np.argmax(preds,axis=1) == y)
             if ii%100==0:
                 print('step {}, intermediate comitee accuracy: {}'.format(ii,np.mean(ev1)))
+                print('step {}, intermediate individual accuracy: {}'.format(ii,np.mean(ev2)))
 
         # ev2= == label
 
     print('comitee accuracy: {}'.format(np.mean(ev1)))
+    print('individual accuracy: {}'.format(np.mean(ev2)))
 # pdb.set_trace()

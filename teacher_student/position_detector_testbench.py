@@ -24,7 +24,7 @@ import pandas as pd
 import time
 import pickle
 import argparse
-from feature_learning_utils import  student3,student4,student5,  write_to_file, traject_learning_dataset_update,  net_weights_reinitializer, load_student
+from feature_learning_utils import  student3,student4,student5,  write_to_file, traject_learning_dataset_update,  net_weights_reinitializer, load_student, pos_det101
 from keras_utils import create_cifar_dataset, split_dataset_xy
 from dataset_utils import Syclopic_dataset_generator, test_num_of_trajectories
 import cifar10_resnet50_lowResBaseline as cifar10_resnet50
@@ -44,7 +44,7 @@ parser.add_argument('--testmode', dest='testmode', action='store_true')
 parser.add_argument('--no-testmode', dest='testmode', action='store_false')
 
 ### student parameters
-parser.add_argument('--epochs', default=1, type=int, help='num training epochs')
+parser.add_argument('--epochs', default=5, type=int, help='num training epochs')
 parser.add_argument('--int_epochs', default=1, type=int, help='num internal training epochs')
 parser.add_argument('--decoder_epochs', default=40, type=int, help='num internal training epochs')
 parser.add_argument('--num_feature', default=64, type=int, help='legacy to be discarded')
@@ -61,7 +61,6 @@ parser.add_argument('--student_nl', default='relu', type=str, help='non linearit
 parser.add_argument('--dropout', default=0.2, type=float, help='dropout1')
 parser.add_argument('--rnn_dropout', default=0.0, type=float, help='dropout1')
 parser.add_argument('--pretrained_student_path', default=None, type=str, help='pretrained student, works only with student3')
-parser.add_argument('--pos_det', default=None, type=str, help='positoin detector model')
 
 parser.add_argument('--decoder_optimizer', default='Adam', type=str, help='Adam or SGD')
 
@@ -86,7 +85,7 @@ parser.add_argument('--n_samples', default=5, type=int, help='n_samples')
 parser.add_argument('--res', default=8, type=int, help='resolution')
 parser.add_argument('--trajectories_num', default=10, type=int, help='number of trajectories to use')
 parser.add_argument('--broadcast', default=0, type=int, help='1-integrate the coordinates by broadcasting them as extra dimentions, 2- add coordinates as an extra input')
-parser.add_argument('--style', default='brownain', type=str, help='choose syclops style of motion')
+parser.add_argument('--style', default='brownian', type=str, help='choose syclops style of motion')
 parser.add_argument('--loss', default='mean_squared_error', type=str, help='loss type for student')
 parser.add_argument('--noise', default=0.15, type=float, help='added noise to the const_p_noise style')
 parser.add_argument('--max_length', default=5, type=int, help='choose syclops max trajectory length')
@@ -96,6 +95,10 @@ parser.add_argument('--max_length', default=5, type=int, help='choose syclops ma
 parser.add_argument('--teacher_net', default='/home/orram/Documents/GitHub/imagewalker/teacher_student/model_510046__1628691784.hdf', type=str, help='path to pretrained teacher net')
 
 parser.add_argument('--resblocks', default=3, type=int, help='resblocks')
+parser.add_argument('--pd_n_layers', default=1, type=int, help='pd_n_layers')
+parser.add_argument('--pd_n_units', default=8, type=int, help='pd_n_units')
+parser.add_argument('--pd_d_filter', default=3, type=int, help='pd_d_filter')
+
 parser.add_argument('--student_version', default=3, type=int, help='student version')
 
 parser.add_argument('--last_layer_size', default=128, type=int, help='last_layer_size')
@@ -159,7 +162,7 @@ parser.set_defaults(data_augmentation=True,
                     testmode=False,
                     dataset_center=True,
                     dense_interface=False,
-                    resnet_mode=False,
+                    resnet_mode=True,
                     skip_student_training=False,
                     fine_tune_student=False,
                     snellen=True)
@@ -229,60 +232,29 @@ trainX, testX = prep_pixels(trainX, testX, resnet_mode=parameters['resnet_mode']
 ############################### Get Trained Teacher ##########################3
 
 path = os.getcwd() + '/'
-if True:
-    teacher = keras.models.load_model(parameters['teacher_net'])
-    teacher.summary()
-    teacher.evaluate(trainX[45000:], trainY[45000:], verbose=2)
 
-    fe_model = teacher.layers[0]
-    be_model = teacher.layers[1]
+save_model_path = path + 'saved_models/{}_feature/'.format(this_run_name)
+checkpoint_filepath = save_model_path + '/{}_feature_net_ckpt'.format(this_run_name)
+if True:
 
 
     #%%
     #################### Get Layer features as a dataset ##########################
-    print('making feature data')
-    intermediate_layer_model = fe_model
-    decoder = be_model
     batch_size = 32
     start = 0
     end = batch_size
     train_data = []
     validation_data = []
     upsample_factor = parameters['upsample'] if parameters['upsample'] !=0 else 1
-    # train_data = np.zeros([50000,upsample_factor*res,upsample_factor*res,num_feature])
     count = 0
 
     feature_space = 64
     feature_list = 'all'
 
-    # for batch in range(len(trainX)//batch_size + 1):
-    #     count+=1
-    #     intermediate_output = intermediate_layer_model(trainX[start:end]).numpy()
-    #     train_data[start:end,:,:] = intermediate_output[:,:,:,:]
-    #     start += batch_size
-    #     end += batch_size
-
-
     print('\nLoaded feature data from teacher')
 
-    #%%
-    # feature_val_data = train_data[45000:]
-    # feature_train_data = train_data[:45000]
-
-    #%%
     ##################### Define Student #########################################
     verbose =parameters['verbose']
-    evaluate_prediction_size = 150
-    prediction_data_path = path +'predictions/'
-    # shape = feature_val_data.shape
-    # teacher_mean = np.mean(feature_val_data.reshape(shape[0]*shape[1]*shape[2], shape[3]),axis = 0)
-    # teacher_var = np.var(feature_val_data.reshape(shape[0]*shape[1]*shape[2], shape[3]),axis = 0)
-    # #print('teacher mean = ', teacher_mean, 'var =', teacher_var)
-    # parameters['teacher_mean'] = teacher_mean
-    # parameters['teacher_var'] = teacher_var
-    parameters['feature_list'] = feature_list
-    save_model_path = path + 'saved_models/{}_feature/'.format(this_run_name)
-    checkpoint_filepath = save_model_path + '/{}_feature_net_ckpt'.format(this_run_name)
 
     model_checkpoint_callback = tf.keras.callbacks.ModelCheckpoint(
         filepath=checkpoint_filepath,
@@ -302,36 +274,6 @@ if True:
                                                   restore_best_weights=True
                                                   )
 
-
-    def save_model(net,path,parameters,checkpoint = True):
-        home_folder = path + '{}_saved_models/'.format(this_run_name)
-        if not os.path.exists(home_folder):
-            os.mkdir(home_folder)
-        if checkpoint:
-            child_folder = home_folder + 'checkpoint/'
-        else:
-            child_folder = home_folder + 'end_of_run_model/'
-        if not os.path.exists(child_folder):
-            os.mkdir(child_folder)
-
-        #Saving weights as numpy array
-        numpy_weights_path = child_folder + '{}_numpy_weights/'.format(this_run_name)
-        if not os.path.exists(numpy_weights_path):
-            os.mkdir(numpy_weights_path)
-        all_weights = net.get_weights()
-        with open(numpy_weights_path + 'numpy_weights_{}'.format(this_run_name), 'wb') as file_pi:
-            pickle.dump(all_weights, file_pi)
-        #LOAD WITH - pickle.load - and load manualy to model.get_layer.set_weights()
-
-        #save weights with keras
-        keras_weights_path = child_folder + '{}_keras_weights/'.format(this_run_name)
-        if not os.path.exists(keras_weights_path):
-            os.mkdir(keras_weights_path)
-        net.save_weights(keras_weights_path + 'keras_weights_{}'.format(this_run_name))
-        #LOADING WITH - load_status = sequential_model.load_weights("ckpt")
-
-    #%%
-
 if parameters['student_version']==3:
     student_fun = student3
 elif parameters['student_version'] == 4:
@@ -344,26 +286,18 @@ else:
 print('initializing student')
 
 
-student = student_fun(sample = parameters['max_length'],
+pos_det =pos_det101(sample = parameters['max_length'],
                    res = res,
                     activation = parameters['student_nl'],
                     dropout = dropout,
                     rnn_dropout = rnn_dropout,
-                    num_feature = num_feature,
-                   rnn_layer1 = parameters['rnn_layer1'],
-                   rnn_layer2 = parameters['rnn_layer2'],
-                   layer_norm = parameters['layer_norm_student'],
-                   batch_norm = parameters['batch_norm_student'],
-                   conv_rnn_type = parameters['conv_rnn_type'],
-                   block_size = parameters['student_block_size'],
-                   add_coordinates = parameters['broadcast'],
-                   time_pool = parameters['time_pool'],
-                   dense_interface=parameters['dense_interface'],
-                    loss=parameters['loss'],
-                      upsample=parameters['upsample'],
-                      pos_det=parameters['pos_det'],
-                      )
-student.summary()
+                    n_layers= parameters['pd_n_layers'],
+                    conv_rnn_type = parameters['conv_rnn_type'],
+            n_units= parameters['pd_n_units'],
+                    d_filter= parameters['pd_d_filter'],
+            loss=parameters['loss'])
+
+pos_det.summary()
 
 train_accur = []
 test_accur = []
@@ -387,107 +321,16 @@ generator_params = args_to_dict(batch_size=BATCH_SIZE, movie_dim=movie_dim, posi
                                     noise = parameters['noise'],
                                 time_sec=parameters['time_sec'], traj_out_scale=parameters['traj_out_scale'],  snellen=parameters['snellen'],vm_kappa=parameters['vm_kappa'])
 print('preparing generators')
-# generator 1
-train_generator_features = Syclopic_dataset_generator(trainX[:-5000], None, teacher=fe_model, **generator_params)
-val_generator_features = Syclopic_dataset_generator(trainX[-5000:].repeat(parameters['val_set_mult'],axis=0), None, teacher=fe_model, validation_mode=True, **generator_params)
-# generator 2
-train_generator_classifier = Syclopic_dataset_generator(trainX[:-5000], labels[:-5000], **generator_params)
-val_generator_classifier = Syclopic_dataset_generator(trainX[-5000:].repeat(parameters['val_set_mult'],axis=0), labels[-5000:].repeat(parameters['val_set_mult'],axis=0), validation_mode=True, **generator_params)
 
-if  parameters['broadcast']==1:
-    print('-------- total trajectories {}, out of tries: {}'.format( *test_num_of_trajectories(val_generator_classifier)))
+train_generator_position = Syclopic_dataset_generator(trainX[:-5000], labels[:-5000],return_x1_as_labels=True, **generator_params)
+val_generator_position = Syclopic_dataset_generator(trainX[-5000:].repeat(parameters['val_set_mult'],axis=0), labels[-5000:].repeat(parameters['val_set_mult'],axis=0), return_x1_as_labels=True, validation_mode=True, **generator_params)
 
-gc.collect()
 if True:
-    student.evaluate(val_generator_features, verbose = 2)
-    # print('{}/{}'.format(epoch+1,epochs))
-
-    if parameters['pretrained_student_path'] is not None:
-        # student_path, student_run_name = parameters['pretrained_student_path'].split('saved_models/')
-        # student_run_name = student_run_name.split('_feature')[0]
-        # student, _  = load_student(path = student_path,  run_name = student_run_name , student=student)
-        load_status = student.load_weights(parameters['pretrained_student_path'])
-
-    if not parameters['skip_student_training']:
-        student_history = student.fit(train_generator_features,
-                        epochs = epochs,
-                        validation_data=val_generator_features,
-                        verbose = verbose,
-                        callbacks=[model_checkpoint_callback,lr_reducer,early_stopper],
-                        use_multiprocessing=False) #checkpoints won't really work
-
-        train_accur = np.array(student_history.history['mean_squared_error']).flatten()
-        test_accur = np.array(student_history.history['val_mean_squared_error']).flatten()
-        save_model(student, save_model_path, parameters, checkpoint = False)
-        #student.load_weights(checkpoint_filepath) # todo! works @ orram
-        save_model(student, save_model_path, parameters, checkpoint = True)
-    student.evaluate(val_generator_features, verbose = 2)
-
-
-############################# The Student learnt the Features!! #################################################
-####################### Now Let's see how good it is in classification ##########################################
-
-#Define a Student_Decoder Network that will take the Teacher weights of the last layers:
-
-student.trainable = parameters['fine_tune_student']
-# config = student.get_config() # Returns pretty much every information about your model
-# print('debu--------------------------',config)
-# print('debu--------------------------',config["layers"][0]["config"])
-# print('debu--------------------------',config["layers"][1]["config"])
-# student.summary()
-input0 = keras.layers.Input(shape=movie_dim)
-input1 = keras.layers.Input(shape=position_dim)
-x = student((input0,input1))
-x = decoder(x)
-fro_student_and_decoder = keras.models.Model(inputs=[input0,input1], outputs=x, name='frontend')
-if parameters['decoder_optimizer'] == 'Adam':
-    opt=tf.keras.optimizers.Adam(lr=2.5e-4)
-elif parameters['decoder_optimizer'] == 'SGD':
-    opt=tf.keras.optimizers.SGD(lr=2.5e-3)
-else:
-    error
-
-fro_student_and_decoder.compile(
-        optimizer=opt,
-        loss="sparse_categorical_crossentropy",
-        metrics=["sparse_categorical_accuracy"],
-    )
-
-
-
-################################## Sanity Check with Teachers Features ###########################################
-pre_training_accur = fro_student_and_decoder.evaluate(val_generator_classifier, verbose=2)
-
-################################## Evaluate with Student Features ###################################
-print('\nEvaluating students features witout more training')
-lr_reducer = keras.callbacks.ReduceLROnPlateau(factor=np.sqrt(0.1), cooldown=0, patience=5, min_lr=0.5e-6)
-early_stopper = keras.callbacks.EarlyStopping(
-    monitor='val_sparse_categorical_accuracy', min_delta=1e-4, patience=10, verbose=0,
-    mode='auto', baseline=None, restore_best_weights=True
-)
-
-parameters['pre_training_decoder_accur'] = pre_training_accur[1]
-############################ Re-train the half_net with the student training features ###########################
-print('\nTraining the base newtwork with the student features')
-
-
-#generator 2
-print('\nTraining the decoder')
-decoder_history = fro_student_and_decoder.fit(train_generator_classifier,
-                       epochs = parameters['decoder_epochs'] if not TESTMODE else 1,
-                       validation_data = val_generator_classifier,
-                       verbose = 2,
-                       callbacks=[lr_reducer,early_stopper],
-            workers=8, use_multiprocessing=True)
-
-home_folder = save_model_path + '{}_saved_models/'.format(this_run_name)
-decoder.save(home_folder +'decoder_trained_model') #todo - ensure that weights were updated
-if parameters['fine_tune_student']:
-    student.save(home_folder +'student_fine_tuned_model')
-
-print('running 5 times on test data')
-test_generator_classifier = Syclopic_dataset_generator(testX, testY, **generator_params)
-for ii in range(5):
-    fro_student_and_decoder.evaluate(test_generator_classifier, verbose=2)
-
-traject_learning_dataset_update(train_accur,test_accur, decoder_history, student,parameters, name = 'full_train_103')
+    pos_det = keras.models.load_model('saved_models/noname_j_t1636377960_feature/pd_model.hdf')
+    # pos_det.evaluate(val_generator_position, verbose = 2)
+    xx,yy = val_generator_position[0]
+    yy_hat = pos_det.predict(xx)
+    print(yy_hat[:5]*232)
+    # print(yy.shape)
+    print(yy[:5]*232)
+    print((yy[:5]-yy_hat[:5])*232)

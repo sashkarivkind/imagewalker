@@ -17,7 +17,7 @@ import random
 import numpy as np
 import tensorflow as tf
 from tensorflow import keras
-from tensorflow.keras.datasets import cifar10
+from tensorflow.keras.datasets import cifar10,cifar100
 import matplotlib.pyplot as plt
 import scipy.stats as stats
 import pandas as pd
@@ -30,11 +30,6 @@ from dataset_utils import Syclopic_dataset_generator, test_num_of_trajectories
 import cifar10_resnet50_lowResBaseline as cifar10_resnet50
 print(os.getcwd() + '/')
 #%%
-
-# load dataset
-(trainX, trainY), (testX, testY) = cifar10.load_data()
-images, labels = trainX, trainY
-
 
 
 parser = argparse.ArgumentParser()
@@ -134,6 +129,9 @@ parser.add_argument('--manual_suffix', default='', type=str, help='manual suffix
 
 parser.add_argument('--data_augmentation', dest='data_augmentation', action='store_true')
 parser.add_argument('--no-data_augmentation', dest='data_augmentation', action='store_false')
+parser.add_argument('--n_classes', default=10, type=int, help='classes')
+
+
 
 parser.add_argument('--rotation_range', default=0.0, type=float, help='dropout1')
 parser.add_argument('--width_shift_range', default=0.1, type=float, help='dropout2')
@@ -159,6 +157,14 @@ print('config  ',config)
 parameters = config
 TESTMODE = parameters['testmode']
 
+# load dataset
+if config['n_classes']==10:
+    (trainX, trainY), (testX, testY)= cifar10.load_data()
+elif config['n_classes']==100:
+    (trainX, trainY), (testX, testY) = cifar100.load_data()
+else:
+    error
+images, labels = trainX, trainY
 
 def prep_pixels(train, test,resnet_mode=False):
     # convert from integers to floats

@@ -7,8 +7,10 @@ Created on Sat Jul 10 20:51:15 2021
 """
 import os 
 import sys
-sys.path.insert(1, '/home/labs/ahissarlab/orra/imagewalker')
-sys.path.insert(1, '/home/orram/Documents/GitHub/imagewalker')
+# sys.path.insert(1, '/home/labs/ahissarlab/orra/imagewalker')
+# sys.path.insert(1, '/home/orram/Documents/GitHub/imagewalker')
+sys.path.insert(1, os.getcwd()+'/..')
+sys.path.insert(1, os.getcwd()+'/../keras-resnet/')
 import random
 import numpy as np
 import tensorflow as tf
@@ -214,6 +216,7 @@ def student3(sample = 10, res = 8, activation = 'tanh', dropout = 0.0, rnn_dropo
              rnn_layer2=64,
              dense_interface=False,
             loss="mean_squared_error",
+            pos_det=None,
              **kwargs):
     #TO DO add option for different block sizes in every convcnn
     #TO DO add skip connections in the block
@@ -233,10 +236,28 @@ def student3(sample = 10, res = 8, activation = 'tanh', dropout = 0.0, rnn_dropo
     else:
         error("not supported type of conv rnn cell")
 
+    #if a position detector is specified then coordinates are being inferred via this detector
+    if pos_det is None:
+        inputB_ = inputB
+    else:
+        pos_det_inst = keras.models.load_model(pos_det)
+        pos_det_inst.trainable = False
+        inputB_ = pos_det_inst(inputA)
+        if coordinate_mode == 1:
+            # inputB_ = tf.broadcast_to(inputB_,(res,res))#.transpose([0,1,3,4,2])
+            # inputB_ = tf.transpose(
+            #     tf.tile(inputB_,[1,res,res]),
+            #     [0,1,3,4,2])
+            inputB_ = tf.expand_dims(inputB_,2)
+            inputB_ = tf.expand_dims(inputB_,2)
+            inputB_  = tf.tile(inputB_, [1,1, res, res,1])
+
+
+
     #Broadcast the coordinates to a [res,res,2] matrix and concat to x
     if add_coordinates:
         if coordinate_mode==1:
-            x = keras.layers.Concatenate()([inputA,inputB])
+            x = keras.layers.Concatenate()([inputA,inputB_])
         elif coordinate_mode==2:
             x = inputA
             a = keras.layers.GRU(attention_net_size,input_shape=(sample, None),return_sequences=True)(inputB)
@@ -535,5 +556,41 @@ def student5(sample = 10, res = 8, activation = 'tanh', dropout = 0.0, rnn_dropo
         optimizer=opt,
         loss=loss,
         metrics=["mean_squared_error","mean_absolute_error","cosine_similarity"],
+    )
+    return model
+
+
+def pos_det101(sample = 10, res = 8, activation = 'tanh', dropout = 0.0, rnn_dropout = 0.0, n_layers=3, conv_rnn_type='gru',
+            n_units=32, d_filter=3,
+            loss="mean_squared_error",
+             **kwargs):
+
+    inputA = keras.layers.Input(shape=(sample, res,res,3))
+
+    if conv_rnn_type == 'lstm':
+        Our_RNN_cell = keras.layers.ConvLSTM2D
+    elif  conv_rnn_type == 'gru':
+        Our_RNN_cell = ConvGRU2D
+    else:
+        error("not supported type of conv rnn cell")
+
+    #Broadcast the coordinates to a [res,res,2] matrix and concat to x
+    x = inputA
+    for ind in range(n_layers):
+        x = Our_RNN_cell(n_units,(d_filter,d_filter), padding = 'same', return_sequences=True,
+                                dropout = dropout,recurrent_dropout=rnn_dropout,
+                            name = 'convLSTM1{}'.format(ind))(x)
+    x = keras.layers.TimeDistributed(keras.layers.GlobalAveragePooling2D())(x)
+
+    x = keras.layers.GRU(n_units,input_shape=(sample, None),return_sequences=True)(x)
+    x = keras.layers.GRU(2,input_shape=(sample, None),return_sequences=True)(x)
+
+    model = keras.models.Model(inputs=inputA,outputs=x, name = 'pos_det')
+    opt=tf.keras.optimizers.Adam(lr=1e-3)
+
+    model.compile(
+        optimizer=opt,
+        loss=loss,
+        metrics=["mean_squared_error", "mean_absolute_error", "cosine_similarity"],
     )
     return model

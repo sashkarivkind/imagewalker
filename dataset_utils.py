@@ -64,7 +64,7 @@ def bad_res102(img,res):
     dwnsmp=cv2.resize(img,res, interpolation = cv2.INTER_CUBIC)
     return dwnsmp
 
-def create_trajectory(starting_point, n_samples = 5, style = 'brownian', noise = 0.15, time_sec=0.3, traj_out_scale=None,  snellen=True, vm_kappa=0):
+def create_trajectory(starting_point, n_samples = 5, style = 'brownian', noise = 0.15, time_sec=0.3, traj_out_scale=None,  snellen=True, vm_kappa=0, shuffle=False):
     if style[:3] == 'xx1':
         if style == 'xx1_intoy_rucci':
             _, steps = gen_drift_traj_condition(duration=time_sec, N=n_samples, snellen=snellen)
@@ -135,9 +135,7 @@ def create_trajectory(starting_point, n_samples = 5, style = 'brownian', noise =
                 phi = np.random.randint(0.1,2*np.pi)
             elif style == 'degenerate' or style == 'degenerate_fix':
                 r += speed + np.random.normal(-0.5,speed_noise)
-
             elif style == 'old':
-
                 starting_point += np.random.randint(-2,3,2)
                 r = 0
                 phi = 0
@@ -152,12 +150,12 @@ def create_trajectory(starting_point, n_samples = 5, style = 'brownian', noise =
 
             steps.append([y,x])
 
-            #shuffling all the trajectory except for the firs point if appropriate flag on
-            if style == 'spiral_shfl' or style == 'spiral_2dir_shfl':
-                step0 = steps[0]
-                steps_ = steps[1:]
-                random.shuffle(steps_)
-                steps = [step0] + steps_
+    #shuffling all the trajectory except for the firs point if an appropriate flag is on
+    if shuffle or style == 'spiral_shfl' or style == 'spiral_2dir_shfl':
+        step0 = steps[0]
+        steps_ = steps[1:]
+        random.shuffle(steps_)
+        steps = [step0] + steps_
 
     return steps
 
@@ -243,7 +241,6 @@ def generate_syclopic_images(images, res, n_samples = 5, mixed_state = True, add
         #Set the padded image
         img=misc.build_cifar_padded(1./256*img)
         img_size = img.shape
-
         if n_trajectories == -1:
             starting_point = np.array([agent.max_q[0]//2,agent.max_q[1]//2])
             steps = create_trajectory(starting_point= starting_point,
@@ -300,7 +297,7 @@ def generate_syclopic_images(images, res, n_samples = 5, mixed_state = True, add
 class Syclopic_dataset_generator(keras.utils.Sequence):
     'Generates data for Keras'
     def __init__(self, images, labels, batch_size=None, movie_dim=None, position_dim=None,
-                 n_classes=None, shuffle=True, syclopic_function=generate_syclopic_images, retutn_x0_only=False,
+                 n_classes=None, shuffle=True, syclopic_function=generate_syclopic_images, return_x0_only=False, return_x1_as_labels=False,
                  prep_data_per_batch=False,one_hot_labels=False, one_random_sample=False, validation_mode=False, loud_en=False, teacher=None, preprocess_fun=lambda x:x, augmenter=None, **kwargs):
         list_IDs = list(range(len(images)))
         'Initialization'
@@ -321,7 +318,8 @@ class Syclopic_dataset_generator(keras.utils.Sequence):
         self.loud_en = loud_en
         self.teacher = teacher
         self.preprocess_fun = preprocess_fun
-        self.retutn_x0_only = retutn_x0_only
+        self.return_x0_only = return_x0_only
+        self.return_x1_as_labels = return_x1_as_labels
         if validation_mode:
             self.prep_data_per_batch = False
             if prep_data_per_batch:
@@ -393,8 +391,10 @@ class Syclopic_dataset_generator(keras.utils.Sequence):
             pick_sample = np.random.randint(self.kwargs['n_samples'], size=data_len)
             return X[0][indx,pick_sample,...], y
         else:
-            if self.retutn_x0_only:
+            if self.return_x0_only:
                 return X[0],y
+            elif self.return_x1_as_labels:
+                return X[0], X[1]
             else:
                 return X, y
 
