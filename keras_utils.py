@@ -36,10 +36,10 @@ def bad_res102(img,res):
     dwnsmp=cv2.resize(img,res, interpolation = cv2.INTER_CUBIC)
     return dwnsmp
 
-def create_trajectory(starting_point, sample = 5, style = 'brownian', noise = 0.15):
+def create_trajectory(starting_point, sample = 5, style = 'brownian', noise = 0.15, step_size = 0.8):
     steps = []
     phi = np.random.randint(0.1,2*np.pi) #the angle in polar coordinates
-    speed = 0.8#np.abs(0.5 + np.random.normal(0,0.5))         #Constant added to the radios
+    speed = step_size#np.abs(0.5 + np.random.normal(0,0.5))         #Constant added to the radios
     r = 3
     name_list = ['const direction + noise','ZigZag','spiral', 'brownian','degenerate']
     speed_noise = speed * 0.2

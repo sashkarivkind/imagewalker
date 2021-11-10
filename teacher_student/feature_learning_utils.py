@@ -167,7 +167,7 @@ def save_model(net,path,parameters,checkpoint = True):
     #LOADING WITH - load_status = sequential_model.load_weights("ckpt")
     
 
-def load_student(path = '/home/orram/Documents/GitHub/imagewalker/teacher_student/',  run_name = 'noname_j178_t1630240486', student=None):
+def load_student(path = '/home/orram/Documents/GitHub/imagewalker/teacher_student/',  run_name = 'noname_j178_t1630240486', student=None, num_samples = None):
 
 
     temp_path = path + 'saved_models/{}_feature/'.format(run_name)
@@ -182,9 +182,12 @@ def load_student(path = '/home/orram/Documents/GitHub/imagewalker/teacher_studen
     with open(numpy_weights_path + 'numpy_weights_{}'.format(run_name), 'rb') as file_pi:
         np_weights = pickle.load(file_pi)
 
+
     if student is None:
         data = pd.read_pickle(path + 'feature_learning/summary_dataframe_feature_learning_full_train_103.pkl')
         parameters = data[data['this_run_name'] == run_name].to_dict('records')[0]
+        if num_samples:
+            parameters['max_length'] = num_samples
         numpy_student = student3(sample = int(parameters['max_length']),
                            res = int(parameters['res']),
                             activation = parameters['student_nl'],
@@ -202,12 +205,13 @@ def load_student(path = '/home/orram/Documents/GitHub/imagewalker/teacher_studen
     layer_index = 0
     for layer in numpy_student.layers:
         if layer.name[:-2] == 'convLSTM':
+            print(layer.name)
             layer_name = layer.name
             saved_weights = [np_weights[layer_index], np_weights[layer_index+ 1], np_weights[layer_index+ 2]]
             numpy_student.get_layer(layer_name).set_weights(saved_weights)
             layer_index += 3
-            
-    return numpy_student, parameters
+    decoder = keras.models.load_model(home_folder + 'decoder_trained_model')
+    return numpy_student, parameters, decoder
 
 def student3(sample = 10, res = 8, activation = 'tanh', dropout = 0.0, rnn_dropout = 0.0, upsample = 0,
              num_feature = 1, layer_norm = False ,batch_norm = False, n_layers=3, conv_rnn_type='lstm',block_size = 1,

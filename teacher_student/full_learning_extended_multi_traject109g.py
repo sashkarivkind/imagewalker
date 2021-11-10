@@ -9,7 +9,7 @@ import sys
 import gc
 sys.path.insert(1, os.getcwd()+'/..')
 sys.path.insert(1, os.getcwd()+'/../keras-resnet/')
-# sys.path.insert(1, '/home/labs/ahissarlab/arivkind/imagewalker')
+sys.path.insert(1, '/home/labs/ahissarlab/arivkind/imagewalker')
 
 # sys.path.insert(1, '/home/labs/ahissarlab/orra/imagewalker')
 # sys.path.insert(1, '/home/orram/Documents/GitHub/imagewalker')
@@ -86,11 +86,11 @@ parser.add_argument('--n_samples', default=5, type=int, help='n_samples')
 parser.add_argument('--res', default=8, type=int, help='resolution')
 parser.add_argument('--trajectories_num', default=10, type=int, help='number of trajectories to use')
 parser.add_argument('--broadcast', default=0, type=int, help='1-integrate the coordinates by broadcasting them as extra dimentions, 2- add coordinates as an extra input')
-parser.add_argument('--style', default='brownain', type=str, help='choose syclops style of motion')
+parser.add_argument('--style', default='spiral_2dir2', type=str, help='choose syclops style of motion')
 parser.add_argument('--loss', default='mean_squared_error', type=str, help='loss type for student')
 parser.add_argument('--noise', default=0.15, type=float, help='added noise to the const_p_noise style')
 parser.add_argument('--max_length', default=5, type=int, help='choose syclops max trajectory length')
-
+parser.add_argument('--random_n_samples', default=0, type=int, help='weather to drew random lengths of trajectories')
 
 ### teacher network parameters
 parser.add_argument('--teacher_net', default='/home/orram/Documents/GitHub/imagewalker/teacher_student/model_510046__1628691784.hdf', type=str, help='path to pretrained teacher net')
@@ -370,8 +370,8 @@ test_accur = []
 # generator parameters:
 
 BATCH_SIZE=32
-position_dim = (parameters['n_samples'],parameters['res'],parameters['res'],2) if  parameters['broadcast']==1 else (parameters['n_samples'],2)
-movie_dim = (parameters['n_samples'], parameters['res'], parameters['res'], 3)
+position_dim = (parameters['max_length'],parameters['res'],parameters['res'],2) if  parameters['broadcast']==1 else (parameters['n_samples'],2)
+movie_dim = (parameters['max_length'], parameters['res'], parameters['res'], 3)
 def args_to_dict(**kwargs):
     return kwargs
 generator_params = args_to_dict(batch_size=BATCH_SIZE, movie_dim=movie_dim, position_dim=position_dim, n_classes=None, shuffle=True,
@@ -385,7 +385,12 @@ generator_params = args_to_dict(batch_size=BATCH_SIZE, movie_dim=movie_dim, posi
                                     style = parameters['style'],
                                     max_length=parameters['max_length'],
                                     noise = parameters['noise'],
-                                time_sec=parameters['time_sec'], traj_out_scale=parameters['traj_out_scale'],  snellen=parameters['snellen'],vm_kappa=parameters['vm_kappa'])
+                                    time_sec=parameters['time_sec'], 
+                                    traj_out_scale=parameters['traj_out_scale'],  
+                                    snellen=parameters['snellen'],
+                                    vm_kappa=parameters['vm_kappa'],
+                                    random_n_samples = parameters['random_n_samples'],
+                                )
 print('preparing generators')
 # generator 1
 train_generator_features = Syclopic_dataset_generator(trainX[:-5000], None, teacher=fe_model, **generator_params)
@@ -393,7 +398,7 @@ val_generator_features = Syclopic_dataset_generator(trainX[-5000:].repeat(parame
 # generator 2
 train_generator_classifier = Syclopic_dataset_generator(trainX[:-5000], labels[:-5000], **generator_params)
 val_generator_classifier = Syclopic_dataset_generator(trainX[-5000:].repeat(parameters['val_set_mult'],axis=0), labels[-5000:].repeat(parameters['val_set_mult'],axis=0), validation_mode=True, **generator_params)
-
+#%%
 if  parameters['broadcast']==1:
     print('-------- total trajectories {}, out of tries: {}'.format( *test_num_of_trajectories(val_generator_classifier)))
 
@@ -482,6 +487,7 @@ decoder_history = fro_student_and_decoder.fit(train_generator_classifier,
 
 home_folder = save_model_path + '{}_saved_models/'.format(this_run_name)
 decoder.save(home_folder +'decoder_trained_model') #todo - ensure that weights were updated
+fro_student_and_decoder.save(home_folder + 'fro_student_and_decoder_trained')
 if parameters['fine_tune_student']:
     student.save(home_folder +'student_fine_tuned_model')
 
