@@ -104,6 +104,7 @@ parser.add_argument('--last_layer_size', default=128, type=int, help='last_layer
 parser.add_argument('--dropout1', default=0.2, type=float, help='dropout1')
 parser.add_argument('--dropout2', default=0.0, type=float, help='dropout2')
 parser.add_argument('--dataset_norm', default=128.0, type=float, help='dropout2')
+parser.add_argument('--syclopic_norm', default=256.0, type=float, help='redundant legacy normalization')
 parser.add_argument('--dataset_center', dest='dataset_center', action='store_true')
 parser.add_argument('--no-dataset_center', dest='dataset_center', action='store_false')
 
@@ -390,6 +391,7 @@ generator_params = args_to_dict(batch_size=BATCH_SIZE, movie_dim=movie_dim, posi
                                     snellen=parameters['snellen'],
                                     vm_kappa=parameters['vm_kappa'],
                                     random_n_samples = parameters['random_n_samples'],
+                                    syclopic_norm=parameters['syclopic_norm']
                                 )
 print('preparing generators')
 # generator 1

@@ -170,7 +170,7 @@ def generate_syclopic_images(images, res, n_samples = 5, mixed_state = True, add
                    trajectory_list=0, n_trajectories = 20,
                    bad_res_func = bad_res102, up_sample = False, broadcast = 0,
                    style = 'brownian', noise = 0.15, max_length = 20, loud=False,
-                   random_n_samples = 0,  **kwargs):
+                   random_n_samples = 0, syclopic_norm=256, **kwargs):
     '''
     Creates a keras dataloader object of syclop outputs
     from a list of images and labels.
@@ -226,7 +226,7 @@ def generate_syclopic_images(images, res, n_samples = 5, mixed_state = True, add
         new_seed = 42
         
     #initiating syclop instance for generating sequences of images
-    img = build_cifar_padded(1. / 256 * images[0])
+    img = build_cifar_padded(1./syclopic_norm * images[0])
     scene = syc.Scene(image_matrix=img)
     if up_sample:
         sensor = syc.Sensor(winx=56, winy=56, centralwinx=32, centralwiny=32, nchannels=3,
@@ -237,8 +237,8 @@ def generate_syclopic_images(images, res, n_samples = 5, mixed_state = True, add
     agent = syc.Agent(max_q=[scene.maxx - sensor.hp.winx, scene.maxy - sensor.hp.winy])
 
     for img_num,img in enumerate(images):
-        if stochastic_sampling:
-            n_samples = np.random.randint(stochastic_sampling,max_length)
+        if random_n_samples:
+            n_samples = np.random.randint(random_n_samples,max_length)
         ##set a random seed in the range specified by the number of trajectories
         if n_trajectories > 0:
             new_seed = random.randint(0,n_trajectories)
@@ -248,7 +248,7 @@ def generate_syclopic_images(images, res, n_samples = 5, mixed_state = True, add
             print('Are we Random?? ', np.random.randint(1, 20))
 
         #Set the padded image
-        img=build_cifar_padded(1./256*img)
+        img=build_cifar_padded(1./syclopic_norm*img)
         img_size = img.shape
         if n_trajectories == -1:
             starting_point = np.array([agent.max_q[0]//2,agent.max_q[1]//2])

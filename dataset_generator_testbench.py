@@ -129,6 +129,9 @@ parser.add_argument('--rotation_range', default=0.0, type=float, help='dropout1'
 parser.add_argument('--width_shift_range', default=0.1, type=float, help='dropout2')
 parser.add_argument('--height_shift_range', default=0.1, type=float, help='dropout2')
 
+
+parser.add_argument('--syclopic_norm', default=1.0, type=float, help='redundant legacy normalization')
+
 parser.set_defaults(data_augmentation=True,layer_norm_res=True,layer_norm_student=True,layer_norm_2=True,skip_conn=True,last_maxpool_en=True, testmode=False,dataset_center=True, dense_interface=False,
                     snellen=False)
 
@@ -154,7 +157,9 @@ generator_params = args_to_dict(batch_size=BATCH_SIZE, movie_dim=(parameters['n_
                                     style = parameters['style'],
                                     max_length=parameters['max_length'],
                                     noise = parameters['noise'],
-                                    time_sec=parameters['time_sec'], traj_out_scale=parameters['traj_out_scale'],  snellen=parameters['snellen'],vm_kappa=parameters['vm_kappa']
+                                syclopic_norm=parameters['syclopic_norm'],
+
+time_sec=parameters['time_sec'], traj_out_scale=parameters['traj_out_scale'],  snellen=parameters['snellen'],vm_kappa=parameters['vm_kappa']
                                 )
 train_generator = Syclopic_dataset_generator(images[:-5000], labels[:-5000], **generator_params)
 val_generator = Syclopic_dataset_generator(images[-5000:].repeat(parameters['val_set_mult'],axis=0), labels[-5000:].repeat(parameters['val_set_mult'],axis=0), validation_mode=True, **generator_params)
