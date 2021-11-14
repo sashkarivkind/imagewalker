@@ -40,8 +40,10 @@ parser = argparse.ArgumentParser()
 
 #general parameters
 parser.add_argument('--path', default=os.getcwd()+'/', help = 'the path from where to take the student and save the data')
-parser.add_argument('--run_name', default = 'noname_j42560_t1632392515')
-parser.add_argument('--test_mode', default=1, help = 'if True will run over 10 features to test')
+parser.add_argument('--run_name', default = 'noname_j96976_t1636556927')
+parser.add_argument('--test_mode', default=1, type = int, help = 'if True will run over 10 features to test')
+parser.add_argument('--train_decoder', default=1, help = 'RETRAIN DECODER - to turn off if we fix the saving issue')
+
 
 config = parser.parse_args()
 config = vars(config)
@@ -50,7 +52,7 @@ print('config  ',config)
 ############################### Get Trained Student ##########################3
 run_name = config['run_name']
 num_samples = 0
-dump_folder = config['path'] + run_name
+dump_folder = config['path'] + run_name + '_{}'.format(time.strftime("%m_%d_%H_%M"))
 config['dump_folder'] = dump_folder
 os.mkdir(dump_folder)
 student = None
@@ -303,7 +305,11 @@ def gradient_ascent_step(latent_starter, filter_index):
 
 def visualize_filter(filter_index, use_img = False):
     # We run gradient ascent for 20 steps
-    iterations = 300
+    if config['test_mode']:
+        iterations = 3
+        
+    else:
+        iterations = 500
     loss_list = []
     latent_starter = tf.random.uniform([1,100])
     for iteration in range(iterations):
@@ -333,6 +339,34 @@ def deprocess_image(img):
     # img *= 255
     # img = np.clip(img, 0, 255).astype("uint8")
     return img
+
+#%%
+# img_list_test = []
+# loss_list_test = []
+# for i in range(10):
+#     print('#############    ',i,'    ##################')
+#     feature = i
+#     #feature_list.append(feature)
+#     #regular
+#     generator = define_generator(latent_dim=100)
+#     optimizer = tf.keras.optimizers.Adam(lr=1e-3)
+#     loss, img = visualize_filter(feature)
+#     img_list_test.append(img)
+#     #img_list.append(img)
+#     loss_list_test.append(-np.array(loss))
+    
+#     fig, ax = plt.subplots(3,3)
+#     fig.suptitle(feature)
+#     indx = 0
+#     for l in range(3):
+#         for k in range(3):
+#             ax[l,k].imshow(img[indx,:,:,:])
+#             indx+=1
+#             ax[l,k].title.set_text(indx)
+
+# plt.figure()
+# for loss_i in loss_list_test:
+#     plt.plot(loss_i)
 #%%
 
 # # The dimensions of our input image
@@ -396,10 +430,8 @@ img_list_spatial = {}
 feature_list = []
 img_list_temporal = {}
 latent_dim = 100
-if config['test_mode']:
-    num_features = 10
-else:
-    num_features = 64
+
+num_features = 64
 for i in range(num_features):
     print('#############    ',i,'    ##################')
     feature = i
@@ -519,49 +551,49 @@ plt.xticks(fontsize = 20)
 plt.yticks(fontsize = 20)
 plt.savefig(dump_folder + '/t_vs_s_scatter.png')
 
-########### 10X3
-feature = np.array(loss_s).argsort()[-1:][::-1]
-#feature = 57
+# ########### 10X3
+# feature = np.array(loss_s).argsort()[-1:][::-1]
+# #feature = 57
 
-img_l = []
-img_l.append(img_list[feature])
-img_l.append(img_list_spatial[feature])
-img_l.append(img_list_temporal[feature])
-fig, ax = plt.subplots(3,10, figsize = (26,12))
-indx = 0
-for k in range(3):
-    for l in range(10):
-        ax[k,l].axis('off')
-        ax[k,l].imshow(img_l[k][l,:,:,:])
-fig.suptitle('feature = {}'.format(feature),y=0.57, fontsize = 55)
-plt.subplots_adjust(left=0.125,
-                    bottom=0.0, 
-                    right=0.9, 
-                    top=0.5, 
-                    wspace=0.1, 
-                    hspace=0.0)
+# img_l = []
+# img_l.append(img_list[feature])
+# img_l.append(img_list_spatial[feature])
+# img_l.append(img_list_temporal[feature])
+# fig, ax = plt.subplots(3,10, figsize = (26,12))
+# indx = 0
+# for k in range(3):
+#     for l in range(10):
+#         ax[k,l].axis('off')
+#         ax[k,l].imshow(img_l[k][l,:,:,:])
+# fig.suptitle('feature = {}'.format(feature),y=0.57, fontsize = 55)
+# plt.subplots_adjust(left=0.125,
+#                     bottom=0.0, 
+#                     right=0.9, 
+#                     top=0.5, 
+#                     wspace=0.1, 
+#                     hspace=0.0)
 
-########### 5*3
-feature = 24
-img_l = []
-img_l.append(img_list[feature])
-img_l.append(img_list_spatial[feature])
-img_l.append(img_list_temporal[feature])
-fig, ax = plt.subplots(3,5)
-indx = 0
-for k in range(3):
-    for l in range(5):
-        ax[k,l].axis('off')
-        ax[k,l].imshow(img_l[k][l,:,:,:])
-fig.suptitle('feature = {}'.format(feature),y=0.58)
-plt.subplots_adjust(left=0.125,
-                    bottom=0.0, 
-                    right=0.9, 
-                    top=0.5, 
-                    wspace=0.2, 
-                    hspace=0.1)
+# ########### 5*3
+# feature = 24
+# img_l = []
+# img_l.append(img_list[feature])
+# img_l.append(img_list_spatial[feature])
+# img_l.append(img_list_temporal[feature])
+# fig, ax = plt.subplots(3,5)
+# indx = 0
+# for k in range(3):
+#     for l in range(5):
+#         ax[k,l].axis('off')
+#         ax[k,l].imshow(img_l[k][l,:,:,:])
+# fig.suptitle('feature = {}'.format(feature),y=0.58)
+# plt.subplots_adjust(left=0.125,
+#                     bottom=0.0, 
+#                     right=0.9, 
+#                     top=0.5, 
+#                     wspace=0.2, 
+#                     hspace=0.1)
 #%%
-# #load old loss
+#load old loss
 # loss_t = pickle.load(open('loss_t_noname_j956187_t1633205328_0', 'rb'))
 # loss_s = pickle.load(open('loss_s_noname_j956187_t1633205328_0', 'rb'))
 # loss_st = pickle.load(open('loss_st_noname_j956187_t1633205328_0', 'rb'))
@@ -578,12 +610,9 @@ feature_importance_metrix = np.zeros([11, 7, 11])
 feature_percentage_metrix = np.zeros([11, 7, 10])
 
 def set_weights_to_zero(model_copy, orig_model, index, layer_name = 'convLSTM30'):
-    weights = np.array(orig_model.get_layer(layer_name).weights[0])
-    #print(weights.shape)
-    #zero out the desired kernel - the weights are in dimention:
-        #[kernel_size, kernel_size, prev_dim, next_dim]
-    weights[:,:,:, index] = 0
-    new_weights = [weights, np.array(orig_model.get_layer(layer_name).weights[1])]
+    weights = np.array(orig_model.get_layer(layer_name).weights[1])
+    weights[:,:,index, :] = 0
+    new_weights = [np.array(orig_model.get_layer(layer_name).weights[0]),weights, np.array(orig_model.get_layer(layer_name).weights[2])]
     model_copy.get_layer(layer_name).set_weights(new_weights)
     return model_copy
 
@@ -610,8 +639,8 @@ def prep_pixels(train, test,resnet_mode=False):
             train_norm -= mean_image
             test_norm -= mean_image
         # normalize to range 0-1
-        train_norm = train_norm / parameters['dataset_norm']
-        test_norm = test_norm /  parameters['dataset_norm']
+        train_norm = train_norm / 1.0
+        test_norm = test_norm /  1.0
         # return normalized images
     return train_norm, test_norm
 
@@ -638,22 +667,29 @@ generator_params = args_to_dict(batch_size=64,
                                     trajectory_list = 0,
                                     broadcast=parameters['broadcast'],
                                     style = parameters['style'],
-                                    max_length=5,#int(parameters['max_length']),
+                                    max_length=int(parameters['max_length']),
                                     noise = parameters['noise'],
                                     time_sec=parameters['time_sec'], 
                                     traj_out_scale=parameters['traj_out_scale'],  
                                     snellen=parameters['snellen'],
                                     vm_kappa=parameters['vm_kappa'],
-                                    stochastic_sampling = parameters['stochastic_sampling'],
+                                    random_n_samples = 0,
                                     )
 print('preparing generators')
-# train_generator_classifier = Syclopic_dataset_generator(
-#                             trainX[:-5000], 
-#                             trainY[:-5000], 
-#                             **generator_params)
+train_generator_classifier = Syclopic_dataset_generator(
+                            trainX[:-5000], 
+                            trainY[:-5000], 
+                            **generator_params)
 
 
-val_generator_classifier = Syclopic_dataset_generator(
+if config['test_mode']:
+    val_generator_classifier = Syclopic_dataset_generator(
+                            trainX[-100:].repeat(parameters['val_set_mult'],axis=0), 
+                            trainY[-100:].repeat(parameters['val_set_mult'],axis=0), 
+                            validation_mode=True,
+                            **generator_params)
+else:
+    val_generator_classifier = Syclopic_dataset_generator(
                             trainX[-5000:].repeat(parameters['val_set_mult'],axis=0), 
                             trainY[-5000:].repeat(parameters['val_set_mult'],axis=0), 
                             validation_mode=True,
@@ -663,10 +699,10 @@ val_generator_classifier = Syclopic_dataset_generator(
 
 #%%
 
-print('The Decoder Baseline Accuracy = ', parameters['decoder_max_test_error'])
+#print('The Decoder Baseline Accuracy = ', parameters['decoder_max_test_error'])
 #########################       Start Evaluation      ################################
 ################################################################################
-######################### Combine Student and Decoder ######################
+######################### Combine Student and Decoder ##########################
 ################################################################################
 model_copy.trainable = False
 # config = student.get_config() # Returns pretty much every information about your model
@@ -679,15 +715,43 @@ student_and_decoder.compile(
         loss="sparse_categorical_crossentropy",
         metrics=["sparse_categorical_accuracy"],
     )
-
+#%%
+####################### Evaluate and retrain decoder ###########################
 print('Evaluating network with current data (chacking network was loaded correctly)')
 full_accur = student_and_decoder.evaluate(val_generator_classifier, verbose = 2)[1]
+
+TESTMODE = config['test_mode']
+if config['train_decoder']:
+    ################### Evaluate with Student Features #########################
+    print('\nEvaluating students features witout more training')
+    lr_reducer = keras.callbacks.ReduceLROnPlateau(factor=np.sqrt(0.1), cooldown=0, patience=5, min_lr=0.5e-6)
+    early_stopper = keras.callbacks.EarlyStopping(
+        monitor='val_sparse_categorical_accuracy', min_delta=1e-4, patience=10, verbose=0,
+        mode='auto', baseline=None, restore_best_weights=True
+    )
+    
+    parameters['pre_training_decoder_accur'] = full_accur
+    ################## Re-train the half_net with the ##########################
+    ##################   student training features    ##########################
+    print('\nTraining the base newtwork with the student features')
+    
+    
+    #generator 2
+    print('\nTraining the decoder')
+    decoder_history = student_and_decoder.fit(train_generator_classifier,
+                           epochs = int(parameters['decoder_epochs']) if not TESTMODE else 1,
+                           validation_data = val_generator_classifier,
+                           verbose = 2,
+                           callbacks=[lr_reducer,early_stopper],
+                workers=8, use_multiprocessing=True)
+#%%
 ######################         get list of           ########################### 
 ######################     strongest to weakest      ###########################
 ######################         activations           ###########################
 s_to_w_t = np.array(loss_t).argsort()[::-1]
 s_to_w_s = np.array(loss_s).argsort()[::-1]
 s_to_w_st = np.array(loss_st).argsort()[::-1]
+#%%
 ######################  Evaluate change in accuracy  ###########################  
 accur_after_zero = []
 for i in range(64):
@@ -713,34 +777,55 @@ for i in range(64):
         )
     accur = student_and_decoder.evaluate(val_generator_classifier, verbose = 2)[1]
     accur_after_zero.append(accur)
-
+#%%
 #Make a dataframe holding the accuracoes by order of st, s, t 
 after_zero_dataframe = pd.DataFrame(columns = ['st','s','t'])
-for i in range(64):
+for i in range(0):
     new_row = [accur_after_zero[s_to_w_st[i]],accur_after_zero[s_to_w_s[i]],accur_after_zero[s_to_w_t[i]]]
-    after_zero_dataframe.append(new_row)
+    after_zero_dataframe = after_zero_dataframe.append(new_row)
 after_zero_dataframe.to_pickle(dump_folder + '/after_zero_dataframe_{}'.format(run_name))
-
+#%%
 ########################     Evaluating 5-10-20        ######################### 
 ########################     strongest features        #########################
 ########################        of t, s & st           #########################
-all_ratings = [s_to_w_st, s_to_w_s, s_to_w_t]
-all_names = ['st','s','t']
+all_ratings = [s_to_w_st, s_to_w_s, s_to_w_t, np.random.randint]
+all_names = ['tempo_spacial','spacial','temporal', 'random']
 silance_slice = pd.DataFrame(columns = ['num_silanced','type','accur','delta_accur'])
 #Going one by one - st, s, t - and silancing the 5 - 10 - 20 most activated features.
+full_accur = student_and_decoder.evaluate(val_generator_classifier, verbose = 2)[1]
 for top in [5,10,20]:
     temp_row = []
     for indx, mode in enumerate(all_ratings):
+        if indx == 3:
+            rng = np.random.default_rng()
+            mode = rng.choice(64, 64, replace = False)
         model_copy = keras.models.clone_model(student)
         model_copy.set_weights(student.get_weights()) 
         for k in range(top):
             model_copy = set_weights_to_zero( model_copy = model_copy,
                                      orig_model = model_copy, 
-                                 index = mode[i])
+                                 index = mode[k])
+        
+        ############################################################################
+        ############################# Combine Student and Decoder ##################
+        ############################################################################
+        model_copy.trainable = False
+        # config = student.get_config() # Returns pretty much every information about your model
+        input0 = keras.layers.Input(shape=movie_dim)
+        input1 = keras.layers.Input(shape=position_dim)
+        x = model_copy((input0,input1))
+        x = decoder(x)
+        student_and_decoder = keras.models.Model(inputs=[input0,input1], outputs=x, name='DRC')
+        
+        
+        student_and_decoder.compile(
+                loss="sparse_categorical_crossentropy",
+                metrics=["sparse_categorical_accuracy"],
+            )
         accur = student_and_decoder.evaluate(val_generator_classifier, verbose = 2)[1]
-        temp_row = [top, all_names[indx], accur, full_accur - accur]
-    print('When silancing the top {} we get a {} decrease in accuracy'.format(top, full_accur - accur))
-    silance_slice.append(temp_row)
+        temp_row = {'num_silanced':top, 'type':all_names[indx], 'accur':accur, 'delta_accur':full_accur - accur}
+        print('When silancing the top {} in {} we get a {} decrease in accuracy'.format(top, all_names[indx], full_accur - accur))
+        silance_slice = silance_slice.append(temp_row, ignore_index = True)
 silance_slice.to_pickle(dump_folder + '/silance_slice_{}'.format(run_name))
 plt.figure()
 sns.barplot(data=silance_slice, x='num_silanced', y="delta_accur", hue="type")
