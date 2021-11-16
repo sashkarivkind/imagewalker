@@ -73,7 +73,7 @@ Defines final dense layers and subsequent softmax layer for classification.
 '''
 
 
-def classifier(inputs,n_classes=10,add_trajectory = False):
+def classifier(inputs,n_classes=10,add_trajectory=False):
     print(add_trajectory)
     if add_trajectory:
         inputB = inputs[1]
