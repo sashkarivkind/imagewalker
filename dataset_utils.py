@@ -213,9 +213,10 @@ def generate_syclopic_images(images, res, n_samples = 5, mixed_state = True, add
 
         return q_sequence
     '''end of auxillary function'''
+    
     if n_samples > max_length:
-        max_length = n_samples
         print('max_length ({}) must be >= n_samples ({}), changed max_length to be == n_samples'.format(max_length, n_samples))
+        max_length = n_samples
     count = 0
     ts_images = []
     dvs_images = []
