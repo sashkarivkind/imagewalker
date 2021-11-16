@@ -155,7 +155,11 @@ if __name__ == "__main__":
     parser.add_argument('--broadcast', default=0, type=int,
                         help='1-integrate the coordinates by broadcasting them as extra dimentions, 2- add coordinates as an extra input')
     parser.add_argument('--style', default='brownian', type=str, help='choose syclops style of motion')
+    parser.add_argument('--pretrained_net', default=None, type=str, help='pretrained network')
+
+
     parser.add_argument('--noise', default=0.15, type=float, help='added noise to the const_p_noise style')
+    parser.add_argument('--manual_scale', default=255., type=float, help='manual_scale should be set for 225 for directly resnet based solutions. For DRC like networks - set to 1.')
     parser.add_argument('--max_length', default=5, type=int, help='choose syclops max trajectory length')
     parser.add_argument('--val_set_mult', default=5, type=int,
                         help='repetitions of validation dataset to reduce trajectory noise')
@@ -180,8 +184,10 @@ if __name__ == "__main__":
 
     # new_res = int(sys.argv[1])
     print('-----------setting resolution to {} ------'.format(res))
-
-    model = define_compile_model(res=parameters['res'],n_classes=parameters['n_classes'],  metrics=['sparse_categorical_accuracy'])
+    if parameters['pretrained_net'] is None:
+        model = define_compile_model(res=parameters['res'],n_classes=parameters['n_classes'],  metrics=['sparse_categorical_accuracy'])
+    else:
+        model = tf.keras.models.load_model(parameters['pretrained_net'])
     model.summary()
 
     # train_X = preprocess_image_input(training_images)
@@ -197,7 +203,7 @@ if __name__ == "__main__":
 
     # trainX=preprocess_image_input(trainX)
     # trainX=preprocess_image_input(testX)
-    scale = 255
+    scale = parameters['manual_scale']
     preprocess_fun = lambda x: preprocess_image_input(scale*x)
 
     position_dim = (parameters['n_samples'], parameters['res'], parameters['res'], 2) if parameters['broadcast'] == 1 else (parameters['n_samples'], 2)
@@ -232,13 +238,14 @@ if __name__ == "__main__":
                                                           labels[-5000:].repeat(parameters['val_set_mult'], axis=0),  one_random_sample=True, preprocess_fun=preprocess_fun,
                                                           validation_mode=True, **generator_params)
 
-    test_generator_classifier = Syclopic_dataset_generator(testX, testY, retutn_x0_only=True,
+    test_generator_classifier = Syclopic_dataset_generator(testX, testY, return_x0_only=True,
                                                           validation_mode=True, **generator_params)
 
     lr_reducer = ReduceLROnPlateau(factor=np.sqrt(0.1), cooldown=0, patience=config['learning_patience'], min_lr=0.5e-6)
     early_stopper = EarlyStopping(min_delta=0.001, patience=config['stopping_patience'])
-    history = model.fit(train_generator_classifier, epochs=parameters['epochs'], validation_data=val_generator_classifier,
-                         verbose=2,callbacks=[lr_reducer, early_stopper])
+    if parameters['pretrained_net'] is None:
+        history = model.fit(train_generator_classifier, epochs=parameters['epochs'], validation_data=val_generator_classifier,
+                             verbose=2,callbacks=[lr_reducer, early_stopper])
 
 
 
@@ -252,9 +259,9 @@ if __name__ == "__main__":
             # print(preds)
             ev1.append( np.argmax(preds.sum(axis=0)) == y)
             ev2.append( np.argmax(preds,axis=1) == y)
-            if ii%100==0:
-                print('step {}, intermediate comitee accuracy: {}'.format(ii,np.mean(ev1)))
-                print('step {}, intermediate individual accuracy: {}'.format(ii,np.mean(ev2)))
+        if bb%10==0:
+            print('step {}, intermediate comitee accuracy: {}'.format(ii,np.mean(ev1)))
+            print('step {}, intermediate individual accuracy: {}'.format(ii,np.mean(ev2)))
 
         # ev2= == label
 

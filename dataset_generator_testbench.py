@@ -62,11 +62,12 @@ parser.add_argument('--n_samples', default=5, type=int, help='sample')
 parser.add_argument('--res', default=8, type=int, help='resolution')
 parser.add_argument('--trajectories_num', default=-1, type=int, help='number of trajectories to use')
 parser.add_argument('--broadcast', default=1, type=int, help='1-integrate the coordinates by broadcasting them as extra dimentions, 2- add coordinates as an extra input')
-parser.add_argument('--style', default='spiral_2dir2', type=str, help='choose syclops style of motion')
+# parser.add_argument('--style', default='spiral_2dir2', type=str, help='choose syclops style of motion')
+# parser.add_argument('--style', default='xx1_not_moving', type=str, help='choose syclops style of motion')
 # parser.add_argument('--style', default='spiral', type=str, help='choose syclops style of motion')
 # parser.add_argument('--style', default='degenerate_fix2', type=str, help='choose syclops style of motion')
 # parser.add_argument('--style', default='xx1_intoy_rucci', type=str, help='choose syclops style of motion')
-# parser.add_argument('--style', default='xx1_vonmises_walk', type=str, help='choose syclops style of motion')
+parser.add_argument('--style', default='xx1_vonmises_walk', type=str, help='choose syclops style of motion')
 # parser.add_argument('--style', default='ZigZag', type=str, help='choose syclops style of motion')
 # parser.add_argument('--style', default='const_p_noise', type=str, help='choose syclops style of motion')
 # parser.add_argument('--style', default='spiral_2dir_shfl', type=str, help='choose syclops style of motion')
@@ -83,7 +84,7 @@ parser.add_argument('--traj_out_scale', default=4.0, type=float, help='scaling t
 parser.add_argument('--snellen', dest='snellen', action='store_true')
 parser.add_argument('--no-snellen', dest='snellen', action='store_false')
 
-parser.add_argument('--vm_kappa', default=-20., type=float, help='factor for emulating sub and super diffusion')
+parser.add_argument('--vm_kappa', default=-1., type=float, help='factor for emulating sub and super diffusion')
 
 
 
@@ -133,7 +134,7 @@ parser.add_argument('--height_shift_range', default=0.1, type=float, help='dropo
 parser.add_argument('--syclopic_norm', default=1.0, type=float, help='redundant legacy normalization')
 
 parser.set_defaults(data_augmentation=True,layer_norm_res=True,layer_norm_student=True,layer_norm_2=True,skip_conn=True,last_maxpool_en=True, testmode=False,dataset_center=True, dense_interface=False,
-                    snellen=False)
+                    snellen=False,shuffle_traj=True)
 
 config = parser.parse_args()
 config = vars(config)
@@ -158,7 +159,7 @@ generator_params = args_to_dict(batch_size=BATCH_SIZE, movie_dim=(parameters['n_
                                     max_length=parameters['max_length'],
                                     noise = parameters['noise'],
                                 syclopic_norm=parameters['syclopic_norm'],
-
+                                shuffle_traj=parameters['shuffle_traj'],
 time_sec=parameters['time_sec'], traj_out_scale=parameters['traj_out_scale'],  snellen=parameters['snellen'],vm_kappa=parameters['vm_kappa']
                                 )
 train_generator = Syclopic_dataset_generator(images[:-5000], labels[:-5000], **generator_params)
@@ -247,17 +248,18 @@ model3.summary()
 # model2.fit_generator(train_generator_pic,  validation_data=val_generator_pic, epochs=5, workers=8, use_multiprocessing=True)
 model3.fit_generator(train_generator_rndsmpl,  validation_data=val_generator_rndsmpl, epochs=0, workers=8, use_multiprocessing=True)
 
-print(val_generator_rndsmpl[0][0])
+# print(val_generator_rndsmpl[0][0])
+print(val_generator_pic[0][0][1][1,:,0,0,:])
 
-# import matplotlib.pyplot as plt
-# zz = []
-# cc = 0
-# plt.figure()
-# for uu in range(3):
-#     for bb in range(3):
-#         traj=val_generator[uu][0][1][bb, :, 0, 0, :]
-#         cc += 1
-#         plt.subplot(3,3,bb*3+uu+1)
-#         plt.plot(traj[:,0],traj[:,1],'-o')
-#         plt.title(parameters['style'])
-# plt.show()
+import matplotlib.pyplot as plt
+zz = []
+cc = 0
+plt.figure()
+for uu in range(3):
+    for bb in range(3):
+        traj=val_generator[uu][0][1][bb, :, 0, 0, :]
+        cc += 1
+        plt.subplot(3,3,bb*3+uu+1)
+        plt.plot(traj[:,0],traj[:,1],'-o')
+        plt.title(parameters['style'])
+plt.show()

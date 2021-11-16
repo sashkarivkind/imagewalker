@@ -91,6 +91,9 @@ parser.add_argument('--loss', default='mean_squared_error', type=str, help='loss
 parser.add_argument('--noise', default=0.15, type=float, help='added noise to the const_p_noise style')
 parser.add_argument('--max_length', default=5, type=int, help='choose syclops max trajectory length')
 parser.add_argument('--random_n_samples', default=0, type=int, help='weather to drew random lengths of trajectories')
+###
+
+parser.add_argument('--pretrained_net', default=None, type=str, help='pretrained network')
 
 ### teacher network parameters
 parser.add_argument('--teacher_net', default='/home/orram/Documents/GitHub/imagewalker/teacher_student/model_510046__1628691784.hdf', type=str, help='path to pretrained teacher net')
@@ -416,98 +419,133 @@ val_generator_classifier = Syclopic_dataset_generator(trainX[-5000:].repeat(para
 if  parameters['broadcast']==1 and not ctrl_mode:
     print('-------- total trajectories {}, out of tries: {}'.format( *test_num_of_trajectories(val_generator_classifier)))
 
-gc.collect()
-if True:
-    student.evaluate(val_generator_features, verbose = 2)
-    # print('{}/{}'.format(epoch+1,epochs))
-
-    if parameters['pretrained_student_path'] is not None:
-        # student_path, student_run_name = parameters['pretrained_student_path'].split('saved_models/')
-        # student_run_name = student_run_name.split('_feature')[0]
-        # student, _  = load_student(path = student_path,  run_name = student_run_name , student=student)
-        load_status = student.load_weights(parameters['pretrained_student_path'])
-
-    if not parameters['skip_student_training']:
-        student_history = student.fit(train_generator_features,
-                        epochs = epochs,
-                        validation_data=val_generator_features,
-                        verbose = verbose,
-                        callbacks=[model_checkpoint_callback,lr_reducer,early_stopper],
-                        use_multiprocessing=False) #checkpoints won't really work
-
-        train_accur = np.array(student_history.history['mean_squared_error']).flatten()
-        test_accur = np.array(student_history.history['val_mean_squared_error']).flatten()
-        save_model(student, save_model_path, parameters, checkpoint = False)
-        #student.load_weights(checkpoint_filepath) # todo! works @ orram
-        save_model(student, save_model_path, parameters, checkpoint = True)
-    student.evaluate(val_generator_features, verbose = 2)
+if parameters['pretrained_net'] is  None:
 
 
-############################# The Student learnt the Features!! #################################################
-####################### Now Let's see how good it is in classification ##########################################
+    gc.collect()
+    if True:
+        student.evaluate(val_generator_features, verbose = 2)
+        # print('{}/{}'.format(epoch+1,epochs))
 
-#Define a Student_Decoder Network that will take the Teacher weights of the last layers:
+        if parameters['pretrained_student_path'] is not None:
+            # student_path, student_run_name = parameters['pretrained_student_path'].split('saved_models/')
+            # student_run_name = student_run_name.split('_feature')[0]
+            # student, _  = load_student(path = student_path,  run_name = student_run_name , student=student)
+            load_status = student.load_weights(parameters['pretrained_student_path'])
 
-student.trainable = parameters['fine_tune_student']
-# config = student.get_config() # Returns pretty much every information about your model
-# print('debu--------------------------',config)
-# print('debu--------------------------',config["layers"][0]["config"])
-# print('debu--------------------------',config["layers"][1]["config"])
-# student.summary()
-input0 = keras.layers.Input(shape=movie_dim)
-input1 = keras.layers.Input(shape=position_dim)
-x = student((input0,input1) if parameters['student_version'] < 100 else input0)
-x = decoder(x)
-fro_student_and_decoder = keras.models.Model(inputs=[input0,input1], outputs=x, name='frontend')
-if parameters['decoder_optimizer'] == 'Adam':
-    opt=tf.keras.optimizers.Adam(lr=2.5e-4)
-elif parameters['decoder_optimizer'] == 'SGD':
-    opt=tf.keras.optimizers.SGD(lr=2.5e-3)
-else:
-    error
+        if not parameters['skip_student_training']:
+            student_history = student.fit(train_generator_features,
+                            epochs = epochs,
+                            validation_data=val_generator_features,
+                            verbose = verbose,
+                            callbacks=[model_checkpoint_callback,lr_reducer,early_stopper],
+                            use_multiprocessing=False) #checkpoints won't really work
 
-fro_student_and_decoder.compile(
-        optimizer=opt,
-        loss="sparse_categorical_crossentropy",
-        metrics=["sparse_categorical_accuracy"],
+            train_accur = np.array(student_history.history['mean_squared_error']).flatten()
+            test_accur = np.array(student_history.history['val_mean_squared_error']).flatten()
+            save_model(student, save_model_path, parameters, checkpoint = False)
+            #student.load_weights(checkpoint_filepath) # todo! works @ orram
+            save_model(student, save_model_path, parameters, checkpoint = True)
+        student.evaluate(val_generator_features, verbose = 2)
+
+
+    ############################# The Student learnt the Features!! #################################################
+    ####################### Now Let's see how good it is in classification ##########################################
+
+    #Define a Student_Decoder Network that will take the Teacher weights of the last layers:
+
+    student.trainable = parameters['fine_tune_student']
+    # config = student.get_config() # Returns pretty much every information about your model
+    # print('debu--------------------------',config)
+    # print('debu--------------------------',config["layers"][0]["config"])
+    # print('debu--------------------------',config["layers"][1]["config"])
+    # student.summary()
+    input0 = keras.layers.Input(shape=movie_dim)
+    input1 = keras.layers.Input(shape=position_dim)
+    x = student((input0,input1) if parameters['student_version'] < 100 else input0)
+    x = decoder(x)
+    fro_student_and_decoder = keras.models.Model(inputs=[input0,input1], outputs=x, name='frontend')
+    if parameters['decoder_optimizer'] == 'Adam':
+        opt=tf.keras.optimizers.Adam(lr=2.5e-4)
+    elif parameters['decoder_optimizer'] == 'SGD':
+        opt=tf.keras.optimizers.SGD(lr=2.5e-3)
+    else:
+        error
+
+    fro_student_and_decoder.compile(
+            optimizer=opt,
+            loss="sparse_categorical_crossentropy",
+            metrics=["sparse_categorical_accuracy"],
+        )
+
+
+
+    ################################## Sanity Check with Teachers Features ###########################################
+    pre_training_accur = fro_student_and_decoder.evaluate(val_generator_classifier, verbose=2)
+
+    ################################## Evaluate with Student Features ###################################
+    print('\nEvaluating students features witout more training')
+    lr_reducer = keras.callbacks.ReduceLROnPlateau(factor=np.sqrt(0.1), cooldown=0, patience=5, min_lr=0.5e-6)
+    early_stopper = keras.callbacks.EarlyStopping(
+        monitor='val_sparse_categorical_accuracy', min_delta=1e-4, patience=10, verbose=0,
+        mode='auto', baseline=None, restore_best_weights=True
     )
 
+    parameters['pre_training_decoder_accur'] = pre_training_accur[1]
+    ############################ Re-train the half_net with the student training features ###########################
+    print('\nTraining the base newtwork with the student features')
 
 
-################################## Sanity Check with Teachers Features ###########################################
-pre_training_accur = fro_student_and_decoder.evaluate(val_generator_classifier, verbose=2)
+    #generator 2
+    print('\nTraining the decoder')
+    decoder_history = fro_student_and_decoder.fit(train_generator_classifier,
+                           epochs = parameters['decoder_epochs'] if not TESTMODE else 1,
+                           validation_data = val_generator_classifier,
+                           verbose = 2,
+                           callbacks=[lr_reducer,early_stopper],
+                workers=8, use_multiprocessing=True)
 
-################################## Evaluate with Student Features ###################################
-print('\nEvaluating students features witout more training')
-lr_reducer = keras.callbacks.ReduceLROnPlateau(factor=np.sqrt(0.1), cooldown=0, patience=5, min_lr=0.5e-6)
-early_stopper = keras.callbacks.EarlyStopping(
-    monitor='val_sparse_categorical_accuracy', min_delta=1e-4, patience=10, verbose=0,
-    mode='auto', baseline=None, restore_best_weights=True
-)
+    home_folder = save_model_path + '{}_saved_models/'.format(this_run_name)
+    decoder.save(home_folder +'decoder_trained_model') #todo - ensure that weights were updated
+    if parameters['fine_tune_student']:
+        student.save(home_folder +'student_fine_tuned_model')
 
-parameters['pre_training_decoder_accur'] = pre_training_accur[1]
-############################ Re-train the half_net with the student training features ###########################
-print('\nTraining the base newtwork with the student features')
-
-
-#generator 2
-print('\nTraining the decoder')
-decoder_history = fro_student_and_decoder.fit(train_generator_classifier,
-                       epochs = parameters['decoder_epochs'] if not TESTMODE else 1,
-                       validation_data = val_generator_classifier,
-                       verbose = 2,
-                       callbacks=[lr_reducer,early_stopper],
-            workers=8, use_multiprocessing=True)
-
-home_folder = save_model_path + '{}_saved_models/'.format(this_run_name)
-decoder.save(home_folder +'decoder_trained_model') #todo - ensure that weights were updated
-if parameters['fine_tune_student']:
-    student.save(home_folder +'student_fine_tuned_model')
+else:
+    fro_student_and_decoder = tf.keras.models.load_model(parameters['pretrained_net'])
 
 print('running 5 times on test data')
 test_generator_classifier = Syclopic_dataset_generator(testX, testY, **generator_params)
 for ii in range(5):
     fro_student_and_decoder.evaluate(test_generator_classifier, verbose=2)
-fro_student_and_decoder.save(home_folder + 'fro_student_and_decoder_trained')
-print('saved fro_student_and_decoder_trained!')
+
+if parameters['pretrained_net'] is  None:
+    fro_student_and_decoder.save(home_folder + 'fro_student_and_decoder_trained')
+    print('saved fro_student_and_decoder_trained!')
+
+generator_params['return_x0_only'] = True
+generator_params['one_random_sample'] = False
+
+test_generator_classifier = Syclopic_dataset_generator(testX, testY, **generator_params)
+
+if ctrl_mode:
+    print('testing in committee mode:')
+    ev1 = []
+    ev2 = []
+    for bb in range(len(test_generator_classifier)):
+        for ii, x in enumerate(test_generator_classifier[bb][0]):
+            preds = fro_student_and_decoder.predict(x)
+            y = test_generator_classifier[bb][1][ii]
+            # print(np.shape(x),np.shape(y))
+            # print(preds)
+            ev1.append(np.argmax(preds.sum(axis=0)) == y)
+            ev2.append(np.argmax(preds, axis=1) == y)
+        if bb % 10 == 0:
+            print('step {}, intermediate committee accuracy: {}'.format(ii, np.mean(ev1)))
+            print('step {}, intermediate individual accuracy: {}'.format(ii, np.mean(ev2)))
+
+        # ev2= == label
+
+    print('645committee accuracy: {}'.format(np.mean(ev1)))
+    print('645individual accuracy: {}'.format(np.mean(ev2)))
+
 traject_learning_dataset_update(train_accur,test_accur, decoder_history, student,parameters, name = 'full_train_103')

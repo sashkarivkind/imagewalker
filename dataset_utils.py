@@ -70,7 +70,7 @@ def bad_res102(img,res):
     dwnsmp=cv2.resize(img,res, interpolation = cv2.INTER_CUBIC)
     return dwnsmp
 
-def create_trajectory(starting_point, n_samples = 5, style = 'brownian', noise = 0.15, time_sec=0.3, traj_out_scale=None,  snellen=True, vm_kappa=0, shuffle=False):
+def create_trajectory(starting_point, n_samples = 5, style = 'brownian', noise = 0.15, time_sec=0.3, traj_out_scale=None,  snellen=True, vm_kappa=0, shuffle_traj=False):
     if style[:3] == 'xx1':
         if style == 'xx1_intoy_rucci':
             _, steps = gen_drift_traj_condition(duration=time_sec, N=n_samples, snellen=snellen)
@@ -78,6 +78,8 @@ def create_trajectory(starting_point, n_samples = 5, style = 'brownian', noise =
         if style == 'xx1_vonmises_walk':
             steps = vonmises_walk(n_steps=n_samples, kappa=vm_kappa)
             steps += starting_point
+        if style == 'xx1_not_moving':
+            steps = starting_point +np.zeros([n_samples,2])
     else:
         steps = []
 
@@ -157,12 +159,13 @@ def create_trajectory(starting_point, n_samples = 5, style = 'brownian', noise =
             steps.append([y,x])
 
     #shuffling all the trajectory except for the firs point if an appropriate flag is on
-    if shuffle or style == 'spiral_shfl' or style == 'spiral_2dir_shfl':
+    if shuffle_traj or style == 'spiral_shfl' or style == 'spiral_2dir_shfl':
+        if type(steps) is not list:
+            steps = steps.tolist()
         step0 = steps[0]
         steps_ = steps[1:]
         random.shuffle(steps_)
         steps = [step0] + steps_
-
     return steps
 
 

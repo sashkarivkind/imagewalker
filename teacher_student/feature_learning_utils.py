@@ -598,3 +598,153 @@ def pos_det101(sample = 10, res = 8, activation = 'tanh', dropout = 0.0, rnn_dro
         metrics=["mean_squared_error", "mean_absolute_error", "cosine_similarity"],
     )
     return model
+
+def student_ctrl103(sample = 10, res = 8, activation = 'tanh', dropout = 0.0, rnn_dropout = 0.0, upsample = 0,
+             num_feature = 1, layer_norm = False ,batch_norm = False, n_layers=3, conv_rnn_type='lstm',block_size = 1,
+             add_coordinates = False, time_pool = False, coordinate_mode=1, attention_net_size=64, attention_net_depth=1,
+             rnn_layer1=32,
+             rnn_layer2=64,
+             dense_interface=False,
+            loss="mean_squared_error",
+            pos_det=None,
+             **kwargs):
+    #TO DO add option for different block sizes in every convcnn
+    #TO DO add skip connections in the block
+    #coordinate_mode 1 - boardcast,
+    #coordinate_mode 2 - add via attention block
+    if time_pool == '0':
+        time_pool = 0
+    inputA = keras.layers.Input(shape=(res,res,3))
+    # if add_coordinates and coordinate_mode==1:
+    #     inputB = keras.layers.Input(shape=(res,res,2))
+    # else:
+    #     inputB = keras.layers.Input(shape=(2))
+    # # if conv_rnn_type == 'lstm':
+    # #     Our_RNN_cell = keras.layers.ConvLSTM2D
+    # # elif  conv_rnn_type == 'gru':
+    # #     Our_RNN_cell = ConvGRU2D
+    # # else:
+    # #     error("not supported type of conv rnn cell")
+    #
+    # #if a position detector is specified then coordinates are being inferred via this detector
+    # if pos_det is None:
+    #     inputB_ = inputB
+    # else:
+    #     pos_det_inst = keras.models.load_model(pos_det)
+    #     pos_det_inst.trainable = False
+    #     inputB_ = pos_det_inst(inputA)
+    #     if coordinate_mode == 1:
+    #         # inputB_ = tf.broadcast_to(inputB_,(res,res))#.transpose([0,1,3,4,2])
+    #         # inputB_ = tf.transpose(
+    #         #     tf.tile(inputB_,[1,res,res]),
+    #         #     [0,1,3,4,2])
+    #         inputB_ = tf.expand_dims(inputB_,2)
+    #         inputB_ = tf.expand_dims(inputB_,2)
+    #         inputB_  = tf.tile(inputB_, [1,1, res, res,1])
+
+
+
+    #Broadcast the coordinates to a [res,res,2] matrix and concat to x
+    # if add_coordinates:
+    #     if coordinate_mode==1:
+    #         x = keras.layers.Concatenate()([inputA,inputB_])
+    #     elif coordinate_mode==2:
+    #         x = inputA
+    #         a = keras.layers.GRU(attention_net_size,input_shape=(sample, None),return_sequences=True)(inputB)
+    #         for ii in range(attention_net_depth-1):
+    #             a = keras.layers.GRU(attention_net_size, input_shape=(sample, None), return_sequences=True)(a)
+    # else:
+    x = inputA
+
+    if upsample != 0:
+        x = keras.layers.UpSampling2D(size=(upsample, upsample))(x)
+
+    print(x.shape)
+    for ind in range(block_size):
+        x = keras.layers.Conv2D(rnn_layer1, (3, 3), padding = 'same',
+                            name = 'subst_convLSTM1{}'.format(ind))(x)
+    for ind in range(block_size):
+        x = keras.layers.Conv2D(rnn_layer2,(3,3), padding = 'same',
+                            name = 'subst_convLSTM2{}'.format(ind))(x)
+        if add_coordinates and coordinate_mode==2:
+            a_ = keras.layers.TimeDistributed(keras.layers.Dense(64,activation="tanh"))(a)
+            a_ = keras.layers.Reshape((sample, 1, 1, -1))(a_)
+            x = x * a_
+    for ind in range(block_size):
+        if ind == block_size - 1:
+            if time_pool:
+                return_seq = True
+            else:
+                return_seq = False
+        else:
+            return_seq = True
+        x = keras.layers.Conv2D(num_feature,(3,3), padding = 'same',
+                            name = 'subst_convLSTM3{}'.format(ind))(x)
+        if dense_interface:
+            if return_seq:
+                x = keras.layers.TimeDistributed(keras.layers.Conv2D(64, (3, 3), padding='same',
+                                        name='anti_sparse'))(x)
+            else:
+                x = keras.layers.Conv2D(64, (3, 3), padding='same',
+                                        name='anti_sparse')(x)
+    print(return_seq)
+    # if time_pool:
+    #     print(time_pool)
+    #     if time_pool == 'max_pool':
+    #         x = tf.keras.layers.MaxPooling3D(pool_size=(sample, 1, 1))(x)
+    #     elif time_pool == 'average_pool':
+    #         x = tf.keras.layers.AveragePooling3D(pool_size=(sample, 1, 1))(x)
+    #     x = tf.squeeze(x,1)
+    if layer_norm:
+        x = keras.layers.LayerNormalization(axis=3)(x)
+    if batch_norm:
+        x = keras.layers.BatchNormalization()(x)
+
+    print(x.shape)
+    # model = keras.models.Model(inputs=[inputA,inputB],outputs=x, name = 'student_ctrl103')
+    model = keras.models.Model(inputs=[inputA   ],outputs=x, name = 'student_ctrl103')
+    opt=tf.keras.optimizers.Adam(lr=1e-3)
+
+    model.compile(
+        optimizer=opt,
+        loss=loss,
+        metrics=["mean_squared_error", "mean_absolute_error", "cosine_similarity"],
+    )
+    return model
+
+def student_ctrl210(sample = 10, res = 8, activation = 'tanh', dropout = 0.0, rnn_dropout = 0.0, upsample = 0,
+             num_feature = 1, layer_norm = False ,batch_norm = False, n_layers=3, conv_rnn_type='lstm',block_size = 1,
+             add_coordinates = False, time_pool = False, coordinate_mode=1, attention_net_size=64, attention_net_depth=1,
+             rnn_layer1=32,
+             rnn_layer2=64,
+             dense_interface=False,
+            loss="mean_squared_error",
+            pos_det=None,
+                    reference_net=None,
+
+             **kwargs):
+
+    #just takes the resnet front-end and warps upsampling around it
+    #TO DO add option for different block sizes in every convcnn
+    #TO DO add skip connections in the block
+    #coordinate_mode 1 - boardcast,
+    #coordinate_mode 2 - add via attention block
+    if time_pool == '0':
+        time_pool = 0
+    inputA = keras.layers.Input(shape=(res,res,3))
+    x = inputA
+    x = keras.layers.UpSampling2D(size=(32//res, 32//res))(x)
+    print(x.shape)
+    inner_net = keras.models.clone_model(reference_net)
+    x = inner_net(x)
+    print('debuggggggggggggggg', x.shape)
+    # model = keras.models.Model(inputs=[inputA,inputB],outputs=x, name = 'student_ctrl103')
+    model = keras.models.Model(inputs=[inputA   ],outputs=x, name = 'student_ctrl210')
+    opt=tf.keras.optimizers.Adam(lr=1e-3)
+
+    model.compile(
+        optimizer=opt,
+        loss=loss,
+        metrics=["mean_squared_error", "mean_absolute_error", "cosine_similarity"],
+    )
+    return model

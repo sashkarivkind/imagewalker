@@ -24,10 +24,13 @@ import pandas as pd
 import time
 import pickle
 import argparse
-from feature_learning_utils import  student3,student4,student5,  write_to_file, traject_learning_dataset_update,  net_weights_reinitializer
+from feature_learning_utils import  student3,student4,student5, student_ctrl103, student_ctrl210, write_to_file, traject_learning_dataset_update,  net_weights_reinitializer, load_student
 from keras_utils import create_cifar_dataset, split_dataset_xy
 from dataset_utils import Syclopic_dataset_generator
 import cifar10_resnet50_lowResBaseline as cifar10_resnet50
+from split_keras_model import split_model
+from tensorflow.keras.applications.resnet50 import ResNet50
+
 print(os.getcwd() + '/')
 #%%
 
@@ -67,7 +70,8 @@ parser.add_argument('--student_nl', default='relu', type=str, help='non linearit
 parser.add_argument('--dropout', default=0.2, type=float, help='dropout1')
 parser.add_argument('--rnn_dropout', default=0.0, type=float, help='dropout1')
 parser.add_argument('--pretrained_student_path', default=None, type=str, help='pretrained student, works only with student3')
-parser.add_argument('--pos_det', default='saved_models/noname_j_t1636361191_feature/pd_model.hdf', type=str, help='positoin detector model')
+# parser.add_argument('--pos_det', default='saved_models/noname_j_t1636361191_feature/pd_model.hdf', type=str, help='positoin detector model')
+parser.add_argument('--pos_det', default=None, type=str, help='positoin detector model')
 
 parser.add_argument('--decoder_optimizer', default='Adam', type=str, help='Adam or SGD')
 
@@ -102,7 +106,7 @@ parser.add_argument('--max_length', default=5, type=int, help='choose syclops ma
 parser.add_argument('--teacher_net', default='/home/orram/Documents/GitHub/imagewalker/teacher_student/model_510046__1628691784.hdf', type=str, help='path to pretrained teacher net')
 
 parser.add_argument('--resblocks', default=3, type=int, help='resblocks')
-parser.add_argument('--student_version', default=3, type=int, help='student version')
+parser.add_argument('--student_version', default=210, type=int, help='student version')
 
 parser.add_argument('--last_layer_size', default=128, type=int, help='last_layer_size')
 
@@ -221,6 +225,15 @@ def prep_pixels(train, test,resnet_mode=False):
 # prepare pixel data
 trainX, testX = prep_pixels(trainX, testX, resnet_mode=parameters['resnet_mode'])
 
+# resnet50 = tf.keras.applications.resnet.ResNet50(input_shape=(224, 224, 3),
+#                                                               include_top=False,
+#                                                               weights='imagenet')
+# resnet50 = tf.keras.applications.resnet.ResNet50(input_shape=(224, 224, 3),
+#                                                           include_top=False,
+#                                                           weights='imagenet')
+# resnet50_buttom,resnet50_top = split_model(resnet50, 'pool1_pool')
+# resnet50_buttom.save('basic_resnet_buttom_model')
+resnet50_buttom = tf.keras.models.load_model('basic_resnet_buttom_model')
 #
 # #%%
 # ############################### Get Trained Teacher ##########################3
@@ -335,12 +348,17 @@ elif parameters['student_version'] == 4:
     student_fun = student4
 elif parameters['student_version'] == 5:
     student_fun = student5
+elif parameters['student_version'] == 103:
+    student_fun = student_ctrl103
+elif parameters['student_version'] == 210:
+    student_fun = student_ctrl210
 else:
     error
 
+
 print('initializing student')
 
-
+fe_model = resnet50_buttom
 student = student_fun(sample = parameters['max_length'],
                    res = res,
                     activation = parameters['student_nl'],
@@ -359,6 +377,7 @@ student = student_fun(sample = parameters['max_length'],
                     loss=parameters['loss'],
                       upsample=parameters['upsample'],
                       pos_det=parameters['pos_det'],
+                      reference_net=fe_model
                       )
 
 print('successfully - initialized student')
