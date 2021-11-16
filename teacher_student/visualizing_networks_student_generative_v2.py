@@ -43,7 +43,7 @@ parser.add_argument('--path', default=os.getcwd()+'/', help = 'the path from whe
 parser.add_argument('--run_name', default = 'noname_j96976_t1636556927')
 parser.add_argument('--test_mode', default=0, type = int, help = 'if True will run over 10 features to test')
 parser.add_argument('--train_decoder', default=1, type = int, help = 'RETRAIN DECODER - to turn off if we fix the saving issue')
-parser.add_argument('--num_of_runs', default = 1, type = int, help = 'How many times to run the generator over a single feature to get distrebution of activation values')
+parser.add_argument('--num_of_runs', default = 5, type = int, help = 'How many times to run the generator over a single feature to get distrebution of activation values')
 parser.add_argument('--feature_silencing_tech', default = 'random', help = 'What techniuqe to use in order to silance out a feature - options: zero, shuffle, random')
 config = parser.parse_args()
 config = vars(config)
@@ -266,7 +266,7 @@ def visualize_filter(filter_index, use_img = False):
         iterations = 3
         
     else:
-        iterations = 100
+        iterations = 500
     loss_list = []
     latent_starter = tf.random.uniform([1,100])
     for iteration in range(iterations):
@@ -298,50 +298,50 @@ def deprocess_image(img):
     return img
 
 #%%
-img_list_test = []
-loss_list_test = []
-loss_data = pd.DataFrame(columns = ['epochs','loss','run_num','feature'])
-for i in range(3):
-    feature = np.random.randint(0,64)
-    #feature = 42
-    print('#############    ','feature: ',feature,'    ##################')
+# img_list_test = []
+# loss_list_test = []
+# loss_data = pd.DataFrame(columns = ['epochs','loss','run_num','feature'])
+# for i in range(3):
+#     feature = np.random.randint(0,64)
+#     #feature = 42
+#     print('#############    ','feature: ',feature,'    ##################')
     
-    #feature_list.append(feature)
-    #regular
-    for run in range(10):
-        print(run)
-        generator = define_generator(latent_dim=100)
-        optimizer = tf.keras.optimizers.Adam(lr=1e-3)
-        loss, img = visualize_filter(feature)
-        img_list_test.append(img)
-        #img_list.append(img)
-        loss_list_test.append(-np.array(loss))
-        temp_dataframe = pd.DataFrame({'epochs':np.arange(0,500), 
-                                        'loss' : list((-np.array(loss)  - np.mean(-np.array(loss)))/np.std(-np.array(loss))),
-                                        'run_num': np.array([run] * 500 ),
-                                        'feature':feature})
-        loss_data = loss_data.append(temp_dataframe)
-        # fig, ax = plt.subplots(3,3)
-        # fig.suptitle(feature)
-        # indx = 0
-    # for l in range(3):
-    #     for k in range(3):
-    #         ax[l,k].imshow(img[indx,:,:,:])
-    #         indx+=1
-    #         ax[l,k].title.set_text(indx)
+#     #feature_list.append(feature)
+#     #regular
+#     for run in range(10):
+#         print(run)
+#         generator = define_generator(latent_dim=100)
+#         optimizer = tf.keras.optimizers.Adam(lr=1e-3)
+#         loss, img = visualize_filter(feature)
+#         img_list_test.append(img)
+#         #img_list.append(img)
+#         loss_list_test.append(-np.array(loss))
+#         temp_dataframe = pd.DataFrame({'epochs':np.arange(0,500), 
+#                                         'loss' : list(-np.array(loss)),
+#                                         'norm_loss' : list((-np.array(loss)  - np.mean(-np.array(loss)))/np.std(-np.array(loss))),
+#                                         'run_num': np.array([run] * 500 ),
+#                                         'feature':feature})
+#         loss_data = loss_data.append(temp_dataframe)
+#         # fig, ax = plt.subplots(3,3)
+#         # fig.suptitle(feature)
+#         # indx = 0
+#     # for l in range(3):
+#     #     for k in range(3):
+#     #         ax[l,k].imshow(img[indx,:,:,:])
+#     #         indx+=1
+#     #         ax[l,k].title.set_text(indx)
 
-plt.figure()
-for loss_i in loss_list_test:
-    plt.plot(loss_i)
-plt.title(feature)
-#%%
-plt.figure()
-sns.lineplot(data = loss_data, x = 'epochs', y = 'loss', hue='feature')
-plt.title('Temporal Activation Maximization Values During Training')
-plt.xlabel('Epoch')
-plt.ylabel('arb. unit')
-#sns.lineplot(data = silance_slice, x = 'num_silanced', y = 'delta_accur', hue = 'type', marker = 'o')
-plt.ylim(-1,1)
+# # plt.figure()
+# # for loss_i in loss_list_test:
+# #     plt.plot(loss_i)
+# # plt.title(feature)
+# plt.figure()
+# sns.lineplot(data = loss_data, x = 'epochs', y = 'loss', hue='feature')
+# plt.title('Spacio-Temporal Activation Maximization Values During Training')
+# plt.xlabel('Epoch')
+# plt.ylabel('arb. unit')
+# #sns.lineplot(data = silance_slice, x = 'num_silanced', y = 'delta_accur', hue = 'type', marker = 'o')
+# plt.ylim(-1,1)
 #%%
 
 # The dimensions of our input image
