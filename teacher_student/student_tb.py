@@ -65,7 +65,7 @@ parser.add_argument('--student_block_size', default=1, type=int, help='number of
 parser.add_argument('--upsample', default=0, type=int, help='spatial upsampling of input 0 for no')
 
 
-parser.add_argument('--conv_rnn_type', default='lstm', type=str, help='conv_rnn_type')
+parser.add_argument('--conv_rnn_type', default='gru', type=str, help='conv_rnn_type')
 parser.add_argument('--student_nl', default='relu', type=str, help='non linearity')
 parser.add_argument('--dropout', default=0.2, type=float, help='dropout1')
 parser.add_argument('--rnn_dropout', default=0.0, type=float, help='dropout1')
@@ -106,7 +106,7 @@ parser.add_argument('--max_length', default=5, type=int, help='choose syclops ma
 parser.add_argument('--teacher_net', default='/home/orram/Documents/GitHub/imagewalker/teacher_student/model_510046__1628691784.hdf', type=str, help='path to pretrained teacher net')
 
 parser.add_argument('--resblocks', default=3, type=int, help='resblocks')
-parser.add_argument('--student_version', default=210, type=int, help='student version')
+parser.add_argument('--student_version', default=3, type=int, help='student version')
 
 parser.add_argument('--last_layer_size', default=128, type=int, help='last_layer_size')
 

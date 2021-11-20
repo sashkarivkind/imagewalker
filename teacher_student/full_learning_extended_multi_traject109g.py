@@ -443,7 +443,7 @@ if True:
         test_accur = np.array(student_history.history['val_mean_squared_error']).flatten()
         save_model(student, save_model_path, parameters, checkpoint = False)
         #student.load_weights(checkpoint_filepath) # todo! works @ orram
-        save_model(student, save_model_path, parameters, checkpoint = True)
+        # save_model(student, save_model_path, parameters, checkpoint = True)
     student.evaluate(val_generator_features, verbose = 2)
 
 
@@ -505,6 +505,9 @@ decoder_history = fro_student_and_decoder.fit(train_generator_classifier,
 
 home_folder = save_model_path + '{}_saved_models/'.format(this_run_name)
 decoder.save(home_folder +'decoder_trained_model') #todo - ensure that weights were updated
+decoder_post_training = fro_student_and_decoder.layers[-1]
+decoder_post_training.save(home_folder +'decoder_trained_model_fix0')
+
 if parameters['fine_tune_student']:
     student.save(home_folder +'student_fine_tuned_model')
 
