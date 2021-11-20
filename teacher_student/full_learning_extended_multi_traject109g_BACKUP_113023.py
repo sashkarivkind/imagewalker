@@ -442,8 +442,13 @@ if True:
         train_accur = np.array(student_history.history['mean_squared_error']).flatten()
         test_accur = np.array(student_history.history['val_mean_squared_error']).flatten()
         save_model(student, save_model_path, parameters, checkpoint = False)
-        # student.load_weights(checkpoint_filepath) # todo! works @ orram
+<<<<<<< HEAD
+        #student.load_weights(checkpoint_filepath) # todo! works @ orram
         # save_model(student, save_model_path, parameters, checkpoint = True)
+=======
+        student.load_weights(checkpoint_filepath) # todo! works @ orram
+        save_model(student, save_model_path, parameters, checkpoint = True)
+>>>>>>> d86a01c7ac4781e5ef7932f658ed382a75984058
     student.evaluate(val_generator_features, verbose = 2)
 
 
