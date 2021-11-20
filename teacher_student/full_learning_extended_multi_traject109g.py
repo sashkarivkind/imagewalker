@@ -321,8 +321,8 @@ if True:
         
         #Saving using net.save method
         model_save_path = child_folder + '{}_keras_save'.format(this_run_name)
-        os.mkdir(model_save_path)
-        net.save(model_save_path)
+        #os.mkdir(model_save_path)
+        #net.save(model_save_path)
         #Saving weights as numpy array
         numpy_weights_path = child_folder + '{}_numpy_weights/'.format(this_run_name)
         if not os.path.exists(numpy_weights_path):
@@ -442,7 +442,7 @@ if True:
         train_accur = np.array(student_history.history['mean_squared_error']).flatten()
         test_accur = np.array(student_history.history['val_mean_squared_error']).flatten()
         save_model(student, save_model_path, parameters, checkpoint = False)
-        #student.load_weights(checkpoint_filepath) # todo! works @ orram
+        student.load_weights(checkpoint_filepath) # todo! works @ orram
         save_model(student, save_model_path, parameters, checkpoint = True)
     student.evaluate(val_generator_features, verbose = 2)
 
